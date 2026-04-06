@@ -1,0 +1,24 @@
+# Dependencies
+node_modules/
+
+# Database (local dev only - production uses Neon/PostgreSQL)
+*.sqlite
+*.sqlite3
+*.db
+
+# Environment variables
+.env
+.env.local
+.env.production
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Build
+dist/
+.vercel/

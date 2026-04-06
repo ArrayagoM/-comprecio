@@ -1,0 +1,640 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0"/>
+  <title>Comprecio</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet"/>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css"/>
+  <style>
+    :root {
+      --green: #1a7a4a; --green2: #2ea865; --green-light: #e8f5ee;
+      --red: #e74c3c; --yellow: #f39c12; --gray: #f4f6f8;
+      --text: #1a1a1a; --muted: #888;
+    }
+    * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+    body {
+      background: var(--gray); font-family: 'Segoe UI', system-ui, sans-serif;
+      color: var(--text); max-width: 480px; margin: 0 auto;
+      min-height: 100vh; padding-bottom: 80px;
+    }
+
+    /* TOP BAR */
+    .topbar { background: var(--green); padding: 14px 16px 12px; position: sticky; top: 0; z-index: 200; }
+    .topbar-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+    .app-logo { color: #fff; font-weight: 900; font-size: 1.4rem; letter-spacing: -.5px; }
+    .app-logo span { color: #a8e6c3; }
+    .user-chip { background: rgba(255,255,255,.15); color: #fff; border-radius: 20px; padding: 5px 12px; font-size: .82rem; border: none; cursor: pointer; }
+    .search-wrap { position: relative; }
+    .search-input { width: 100%; padding: 12px 44px 12px 16px; border-radius: 12px; border: none; font-size: 1rem; outline: none; box-shadow: 0 2px 8px rgba(0,0,0,.12); }
+    .search-icon { position: absolute; right: 14px; top: 50%; transform: translateY(-50%); color: var(--muted); }
+    .search-suggestions { position: absolute; top: 100%; left: 0; right: 0; background: #fff; border-radius: 12px; z-index: 300; box-shadow: 0 8px 24px rgba(0,0,0,.15); overflow: hidden; margin-top: 4px; display: none; }
+    .sugg-item { padding: 12px 16px; cursor: pointer; border-bottom: 1px solid #f0f0f0; display: flex; align-items: center; gap: 10px; }
+    .sugg-item:last-child { border-bottom: none; }
+    .sugg-item:hover, .sugg-item:active { background: var(--green-light); }
+
+    /* SCREENS */
+    .screen { display: none; }
+    .screen.active { display: block; animation: fadeInScreen .22s ease; }
+
+    /* BOTTOM NAV */
+    .bottom-nav { position: fixed; bottom: 0; left: 50%; transform: translateX(-50%); width: 100%; max-width: 480px; background: #fff; border-top: 1px solid #e9ecef; display: flex; z-index: 200; box-shadow: 0 -4px 16px rgba(0,0,0,.06); }
+    .nav-item { flex: 1; display: flex; flex-direction: column; align-items: center; padding: 10px 0 8px; border: none; background: none; cursor: pointer; color: var(--muted); font-size: .7rem; gap: 3px; transition: color .15s; }
+    .nav-item i { font-size: 1.3rem; }
+    .nav-item.active { color: var(--green); }
+    .nav-fab { background: var(--green); border-radius: 50%; width: 52px; height: 52px; display: flex; align-items: center; justify-content: center; color: #fff; font-size: 1.5rem; margin-top: -20px; box-shadow: 0 4px 16px rgba(26,122,74,.4); border: 3px solid #fff; }
+
+    /* SECTION */
+    .pad { padding: 16px; }
+    .pill-row { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 4px; }
+    .pill-row::-webkit-scrollbar { display: none; }
+    .pill { flex-shrink: 0; background: #fff; border: 1.5px solid #e0e0e0; border-radius: 20px; padding: 6px 14px; font-size: .82rem; cursor: pointer; white-space: nowrap; transition: all .15s; }
+    .pill.active, .pill:hover { background: var(--green); color: #fff; border-color: var(--green); }
+    .label-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+    .label { font-weight: 700; font-size: 1rem; }
+    .label-link { color: var(--green); font-size: .85rem; cursor: pointer; }
+
+    /* PRICE CARD */
+    .price-card { background: #fff; border-radius: 16px; padding: 16px; margin-bottom: 10px; box-shadow: 0 2px 8px rgba(0,0,0,.05); border-left: 4px solid var(--green); cursor: pointer; transition: transform .12s; }
+    .price-card:active { transform: scale(.98); }
+    .price-card.stale { border-left-color: var(--yellow); }
+    .price-card.nostock { border-left-color: #ccc; opacity: .7; }
+    .card-top { display: flex; justify-content: space-between; align-items: flex-start; }
+    .card-product { font-weight: 700; font-size: 1rem; }
+    .card-unit { color: var(--muted); font-size: .8rem; }
+    .card-store { color: var(--muted); font-size: .83rem; margin-top: 3px; }
+    .card-price { font-size: 1.6rem; font-weight: 900; color: var(--green); line-height: 1; }
+    .card-price.promo { color: var(--yellow); }
+    .card-badges { display: flex; gap: 6px; margin-top: 10px; flex-wrap: wrap; align-items: center; }
+    .badge-f { background: #d4edda; color: #155724; border-radius: 10px; padding: 3px 9px; font-size: .72rem; font-weight: 600; }
+    .badge-r { background: #fff3cd; color: #856404; border-radius: 10px; padding: 3px 9px; font-size: .72rem; font-weight: 600; }
+    .badge-o { background: #f8d7da; color: #721c24; border-radius: 10px; padding: 3px 9px; font-size: .72rem; font-weight: 600; }
+    .badge-p { background: #fff3cd; color: #856404; border-radius: 10px; padding: 3px 9px; font-size: .72rem; font-weight: 600; }
+    .badge-c { color: var(--muted); font-size: .75rem; }
+    .react-row { display: flex; gap: 8px; margin-top: 10px; }
+    .react-btn { border: 1.5px solid #dee2e6; border-radius: 20px; padding: 5px 12px; font-size: .8rem; cursor: pointer; background: #fff; color: #555; transition: all .15s; flex: 1; text-align: center; }
+    .react-btn.ok { background: #d4edda; border-color: #28a745; color: #155724; }
+    .react-btn.bad { background: #f8d7da; border-color: #dc3545; color: #721c24; }
+
+    /* EMPTY / LOADER */
+    .empty { text-align: center; padding: 48px 20px; color: var(--muted); }
+    .empty-icon { font-size: 3.5rem; margin-bottom: 12px; }
+    .empty h3 { font-size: 1.1rem; font-weight: 700; color: #555; margin-bottom: 6px; }
+    .empty p { font-size: .88rem; line-height: 1.5; }
+    .loader { text-align: center; padding: 32px; color: var(--muted); }
+
+    /* WIZARD */
+    .wizard-step { display: none; }
+    .wizard-step.active { display: block; }
+    .step-progress { display: flex; gap: 6px; padding: 14px 16px 0; }
+    .step-dot { flex: 1; height: 4px; border-radius: 4px; background: #e0e0e0; transition: background .3s; }
+    .step-dot.done { background: var(--green); }
+    .step-header { text-align: center; padding: 20px 16px 8px; }
+    .step-num { font-size: .75rem; color: var(--muted); font-weight: 700; text-transform: uppercase; letter-spacing: .5px; }
+    .step-header h2 { font-size: 1.4rem; font-weight: 800; margin: 6px 0 4px; }
+    .step-header p { color: var(--muted); font-size: .9rem; }
+    .big-search { display: block; width: calc(100% - 32px); margin: 0 16px 8px; padding: 14px 16px; border-radius: 14px; border: 2px solid #e0e0e0; font-size: 1rem; outline: none; transition: border-color .2s; }
+    .big-search:focus { border-color: var(--green); }
+    .option-list { padding: 0 16px; }
+    .option-item { background: #fff; border-radius: 14px; padding: 14px 16px; margin-bottom: 8px; cursor: pointer; border: 2px solid transparent; transition: all .15s; display: flex; align-items: center; gap: 12px; }
+    .option-item:active, .option-item.selected { border-color: var(--green); background: var(--green-light); }
+    .option-icon { font-size: 1.3rem; }
+    .option-label { font-weight: 700; font-size: .95rem; }
+    .option-sub { color: var(--muted); font-size: .8rem; margin-top: 1px; }
+    .price-input-big { font-size: 3rem; font-weight: 900; color: var(--green); border: none; border-bottom: 3px solid var(--green); background: none; outline: none; width: 100%; text-align: center; padding: 8px 0; }
+    .price-input-big::placeholder { color: #ccc; }
+    .currency-label { text-align: center; color: var(--muted); font-size: 1rem; margin-bottom: 8px; }
+    .btn-next { display: block; width: calc(100% - 32px); margin: 16px auto; background: var(--green); color: #fff; border: none; border-radius: 14px; padding: 16px; font-size: 1rem; font-weight: 700; cursor: pointer; transition: background .15s; }
+    .btn-next:disabled { background: #ccc; cursor: not-allowed; }
+    .btn-next:not(:disabled):hover { background: #155e3a; }
+    .btn-back { display: block; width: calc(100% - 32px); margin: 0 auto 12px; background: transparent; color: var(--muted); border: none; border-radius: 14px; padding: 10px; font-size: .9rem; cursor: pointer; }
+    .extras-row { display: flex; gap: 10px; padding: 0 16px; margin-bottom: 8px; }
+    .extra-chip { flex: 1; border: 2px solid #e0e0e0; border-radius: 12px; padding: 10px; text-align: center; cursor: pointer; font-size: .82rem; font-weight: 600; transition: all .15s; background: #fff; }
+    .extra-chip.active { border-color: var(--yellow); background: #fff8e1; color: #856404; }
+
+    /* RESULT */
+    .result-hero { background: var(--green); color: #fff; text-align: center; padding: 32px 20px; }
+    .result-hero .big-price { font-size: 3.5rem; font-weight: 900; }
+    .result-hero .prod-title { font-size: 1.1rem; opacity: .9; }
+
+    /* MAP */
+    #map { height: 300px; }
+    .map-overlay { padding: 10px 16px 0; }
+
+    /* RANKING */
+    .rank-item { background: #fff; border-radius: 16px; padding: 14px 16px; margin-bottom: 8px; box-shadow: 0 2px 8px rgba(0,0,0,.05); display: flex; align-items: center; gap: 12px; }
+    .rank-num { width: 34px; height: 34px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 900; font-size: .9rem; flex-shrink: 0; }
+    .r1 { background: #FFD700; color: #7b6000; }
+    .r2 { background: #C0C0C0; color: #555; }
+    .r3 { background: #CD7F32; color: #fff; }
+    .rn { background: var(--green-light); color: var(--green); }
+
+    /* PROFILE */
+    .profile-hero { background: var(--green); padding: 28px 20px 24px; text-align: center; color: #fff; }
+    .avatar { width: 72px; height: 72px; border-radius: 50%; background: rgba(255,255,255,.2); color: #fff; font-size: 2rem; font-weight: 900; display: flex; align-items: center; justify-content: center; margin: 0 auto 12px; }
+    .profile-name { font-size: 1.3rem; font-weight: 800; }
+    .profile-badge-pill { display: inline-block; background: rgba(255,255,255,.2); border-radius: 20px; padding: 4px 14px; font-size: .82rem; margin-top: 6px; }
+    .pts-big { font-size: 2.4rem; font-weight: 900; margin-top: 8px; }
+    .pts-label { font-size: .82rem; opacity: .8; }
+    .stats-row { display: flex; padding: 16px; gap: 10px; }
+    .stat-box { flex: 1; background: #fff; border-radius: 14px; padding: 14px 10px; text-align: center; }
+    .stat-n { font-size: 1.6rem; font-weight: 900; color: var(--green); }
+    .stat-l { font-size: .75rem; color: var(--muted); margin-top: 2px; }
+    .info-card { background: #fff; border-radius: 14px; margin: 0 16px 12px; padding: 16px; }
+    .info-row { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+    .info-row:last-child { margin-bottom: 0; }
+
+    /* ── ANIMACIONES ── */
+    @keyframes fadeInOverlay {
+      from { opacity: 0; }
+      to   { opacity: 1; }
+    }
+    @keyframes fadeOutOverlay {
+      from { opacity: 1; }
+      to   { opacity: 0; }
+    }
+    @keyframes slideUp {
+      from { transform: translateY(100%); }
+      to   { transform: translateY(0); }
+    }
+    @keyframes slideDown {
+      from { transform: translateY(0); }
+      to   { transform: translateY(100%); }
+    }
+    @keyframes fadeInScreen {
+      from { opacity: 0; transform: translateY(10px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    @keyframes onboardingPop {
+      from { opacity: 0; transform: scale(.95) translateY(20px); }
+      to   { opacity: 1; transform: scale(1) translateY(0); }
+    }
+    @keyframes pinHint {
+      0%   { transform: rotate(-45deg) translate(0,0); }
+      20%  { transform: rotate(-45deg) translate(18px,-8px); }
+      40%  { transform: rotate(-45deg) translate(-14px,-6px); }
+      60%  { transform: rotate(-45deg) translate(10px,0px); }
+      80%  { transform: rotate(-45deg) translate(0,0); }
+      100% { transform: rotate(-45deg) translate(0,0); }
+    }
+
+    /* AUTH SHEET */
+    .sheet-bg {
+      position: fixed; inset: 0; background: rgba(0,0,0,0);
+      z-index: 500; display: none; align-items: flex-end; justify-content: center;
+      transition: background .28s ease;
+    }
+    .sheet-bg.open { display: flex; background: rgba(0,0,0,.48); animation: fadeInOverlay .25s ease; }
+    .sheet-bg.closing { animation: fadeOutOverlay .25s ease forwards; }
+    .sheet-box {
+      background: #fff; border-radius: 20px 20px 0 0;
+      width: 100%; max-width: 480px; max-height: 90vh; overflow-y: auto;
+      padding: 0 20px 32px;
+      transform: translateY(0);
+      animation: slideUp .32s cubic-bezier(.32,1,.4,1);
+    }
+    .sheet-bg.closing .sheet-box { animation: slideDown .25s ease forwards; }
+    .sheet-handle { width: 40px; height: 4px; background: #e0e0e0; border-radius: 4px; margin: 12px auto 16px; }
+    .auth-tabs { display: flex; gap: 0; background: var(--gray); border-radius: 10px; padding: 4px; margin-bottom: 16px; }
+    .auth-tab { flex: 1; text-align: center; padding: 8px; border-radius: 8px; cursor: pointer; font-weight: 600; font-size: .9rem; border: none; background: none; color: var(--muted); }
+    .auth-tab.active { background: #fff; color: var(--green); }
+    .form-inp { width: 100%; padding: 13px 14px; border-radius: 12px; border: 1.5px solid #e0e0e0; font-size: 1rem; outline: none; margin-bottom: 10px; transition: border-color .2s; }
+    .form-inp:focus { border-color: var(--green); }
+    .form-sel { width: 100%; padding: 13px 14px; border-radius: 12px; border: 1.5px solid #e0e0e0; font-size: 1rem; outline: none; margin-bottom: 10px; background: #fff; }
+    .btn-auth { width: 100%; padding: 14px; border-radius: 12px; border: none; background: var(--green); color: #fff; font-size: 1rem; font-weight: 700; cursor: pointer; margin-top: 4px; }
+    .auth-err { color: var(--red); font-size: .85rem; margin-bottom: 8px; display: none; }
+
+    /* DETAIL SHEET */
+    .detail-bg {
+      position: fixed; inset: 0; background: rgba(0,0,0,0);
+      z-index: 400; display: none; align-items: flex-end; justify-content: center;
+    }
+    .detail-bg.open { display: flex; background: rgba(0,0,0,.48); animation: fadeInOverlay .25s ease; }
+    .detail-bg.closing { animation: fadeOutOverlay .25s ease forwards; }
+    .detail-box {
+      background: #fff; border-radius: 20px 20px 0 0;
+      width: 100%; max-width: 480px; max-height: 85vh; overflow-y: auto; padding: 0 0 32px;
+      animation: slideUp .32s cubic-bezier(.32,1,.4,1);
+    }
+    .detail-bg.closing .detail-box { animation: slideDown .25s ease forwards; }
+    .detail-handle { width: 40px; height: 4px; background: #e0e0e0; border-radius: 4px; margin: 12px auto 14px; }
+    .detail-header { padding: 0 20px 12px; border-bottom: 1px solid #f0f0f0; }
+    .detail-title { font-size: 1.15rem; font-weight: 800; }
+    .detail-sub { color: var(--muted); font-size: .85rem; margin-top: 2px; }
+    .detail-body { padding: 16px 20px 0; }
+
+    /* TOAST */
+    .my-toast { position: fixed; bottom: 90px; left: 50%; transform: translateX(-50%); background: #1a1a1a; color: #fff; border-radius: 12px; padding: 12px 20px; font-size: .9rem; font-weight: 600; z-index: 999; opacity: 0; transition: opacity .3s, transform .3s; transform: translateX(-50%) translateY(8px); white-space: nowrap; pointer-events: none; }
+    .my-toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+    /* Nav item transition */
+    .nav-item { transition: color .18s; }
+    .nav-fab { transition: transform .15s, box-shadow .15s; }
+    .nav-item:active .nav-fab { transform: scale(.92); }
+
+    /* Card hover/tap */
+    .price-card { transition: transform .12s, box-shadow .12s; }
+    .price-card:active { transform: scale(.98); box-shadow: 0 1px 4px rgba(0,0,0,.08); }
+
+    /* Pill transition */
+    .pill { transition: all .18s ease; }
+    .option-item { transition: border-color .15s, background .15s; }
+  </style>
+</head>
+<body>
+
+<!-- TOP BAR -->
+<div class="topbar">
+  <div class="topbar-row">
+    <div class="app-logo">Compre<span>cio</span></div>
+    <button class="user-chip" onclick="onChipClick()">
+      <i class="fa fa-user me-1"></i><span id="chip-label">Ingresar</span>
+    </button>
+  </div>
+  <div class="search-wrap">
+    <input class="search-input" id="global-search" placeholder="🔍  ¿Qué querés buscar?" oninput="onGlobalSearch(this.value)" autocomplete="off"/>
+    <div class="search-suggestions" id="global-sugg"></div>
+  </div>
+</div>
+
+<!-- ══ ONBOARDING ══ -->
+<div id="onboarding-bg" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:900;align-items:flex-end;justify-content:center;animation:fadeInOverlay .3s ease">
+  <div style="background:#fff;border-radius:24px 24px 0 0;width:100%;max-width:480px;padding:28px 24px 40px;animation:slideUp .38s cubic-bezier(.32,1,.4,1)">
+    <div style="text-align:center;margin-bottom:24px">
+      <div style="font-size:3rem;margin-bottom:12px">🏷️</div>
+      <div style="font-size:1.5rem;font-weight:900;color:var(--green);margin-bottom:8px">¡Bienvenido a Comprecio!</div>
+      <p style="color:#555;font-size:.95rem;line-height:1.5">La comunidad para encontrar los <strong>mejores precios</strong> de tu barrio.<br>Entre todos vemos dónde conviene comprar.</p>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:12px;margin-bottom:24px">
+      <div style="display:flex;align-items:center;gap:14px;background:var(--green-light);border-radius:14px;padding:14px">
+        <div style="font-size:1.8rem">🔍</div>
+        <div><div style="font-weight:700;font-size:.95rem">Buscá precios</div><div style="color:var(--muted);font-size:.82rem">Encontrá dónde está más barato lo que necesitás</div></div>
+      </div>
+      <div style="display:flex;align-items:center;gap:14px;background:#fff8e1;border-radius:14px;padding:14px">
+        <div style="font-size:1.8rem">📸</div>
+        <div><div style="font-weight:700;font-size:.95rem">Cargá precios</div><div style="color:var(--muted);font-size:.82rem">Avisale al barrio cuánto cuesta algo que viste</div></div>
+      </div>
+      <div style="display:flex;align-items:center;gap:14px;background:#f3e8ff;border-radius:14px;padding:14px">
+        <div style="font-size:1.8rem">🏆</div>
+        <div><div style="font-weight:700;font-size:.95rem">Ganás puntos</div><div style="color:var(--muted);font-size:.82rem">Cada precio que cargás te suma puntos y medallas</div></div>
+      </div>
+    </div>
+    <button onclick="closeOnboarding()" style="width:100%;padding:16px;border-radius:14px;border:none;background:var(--green);color:#fff;font-size:1.05rem;font-weight:800;cursor:pointer">
+      ¡Empezar! →
+    </button>
+  </div>
+</div>
+
+<!-- ══ HOME ══ -->
+<div class="screen active" id="screen-home">
+  <div class="pad">
+    <div class="pill-row" id="cat-pills" style="margin-bottom:16px"></div>
+    <div class="label-row">
+      <div class="label">Precios recientes</div>
+      <div class="label-link" onclick="goTab('ranking')">Ver todos →</div>
+    </div>
+    <div id="home-feed">
+      <div class="loader"><i class="fa fa-circle-notch fa-spin"></i></div>
+    </div>
+  </div>
+</div>
+
+<!-- ══ MAPA ══ -->
+<div class="screen" id="screen-mapa">
+
+  <!-- Overlay de posicionamiento (se muestra al agregar negocio) -->
+  <div id="placement-overlay" style="display:none;position:absolute;top:0;left:0;right:0;z-index:500;pointer-events:none">
+    <!-- Barra superior -->
+    <div style="background:var(--green);color:#fff;padding:12px 16px;display:flex;align-items:center;gap:10px;pointer-events:all;box-shadow:0 4px 16px rgba(0,0,0,.2)">
+      <div style="flex:1">
+        <div style="font-weight:800;font-size:.95rem">📍 Posicioná el pin</div>
+        <div style="font-size:.78rem;opacity:.85">Arrastrá el pin al lugar exacto del negocio</div>
+      </div>
+      <button onclick="cancelPlacement()" style="background:rgba(255,255,255,.2);color:#fff;border:none;border-radius:20px;padding:6px 14px;font-size:.82rem;cursor:pointer">Cancelar</button>
+    </div>
+    <!-- Botón confirmar abajo del mapa -->
+    <div style="position:fixed;bottom:90px;left:50%;transform:translateX(-50%);width:calc(100% - 32px);max-width:448px;pointer-events:all">
+      <button onclick="confirmPlacement()" style="width:100%;padding:15px;border-radius:14px;border:none;background:var(--green);color:#fff;font-size:1rem;font-weight:800;cursor:pointer;box-shadow:0 4px 20px rgba(26,122,74,.5)">
+        ✅ Confirmar ubicación
+      </button>
+    </div>
+  </div>
+
+  <div id="map" style="position:relative;z-index:1">
+    <!-- Leyenda del mapa -->
+    <div style="position:absolute;bottom:10px;left:10px;z-index:400;background:rgba(255,255,255,.92);border-radius:10px;padding:7px 11px;font-size:.72rem;box-shadow:0 2px 8px rgba(0,0,0,.15);line-height:1.8;backdrop-filter:blur(4px)">
+      <div><span style="display:inline-block;width:11px;height:11px;border-radius:50%;background:#2ea865;border:2px solid #1a7a4a;margin-right:5px;vertical-align:middle"></span>Verificado</div>
+      <div><span style="display:inline-block;width:11px;height:11px;border-radius:50%;background:#ccc;border:2px solid #aaa;margin-right:5px;vertical-align:middle"></span>Sin verificar</div>
+    </div>
+  </div>
+
+  <!-- Controles normales del mapa -->
+  <div class="map-overlay" id="map-controls">
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:6px">
+      <button onclick="goToMyLocation()" style="flex-shrink:0;background:#fff;color:var(--green);border:2px solid var(--green);border-radius:20px;padding:7px 14px;font-size:.82rem;font-weight:700;cursor:pointer;white-space:nowrap;box-shadow:0 2px 8px rgba(0,0,0,.1)">
+        📍 Mi ubicación
+      </button>
+      <button onclick="openAddBiz()" style="flex-shrink:0;background:var(--green);color:#fff;border:none;border-radius:20px;padding:7px 14px;font-size:.82rem;font-weight:700;cursor:pointer;white-space:nowrap;box-shadow:0 2px 8px rgba(0,0,0,.2)">
+        🏪 Agregar negocio
+      </button>
+    </div>
+    <div class="pill-row" id="map-pills"></div>
+  </div>
+
+  <div class="pad" style="padding-top:8px">
+    <div id="map-list"><div class="loader"><i class="fa fa-circle-notch fa-spin"></i></div></div>
+  </div>
+</div>
+
+<!-- ══ REPORTAR ══ -->
+<div class="screen" id="screen-report">
+
+  <div class="step-progress">
+    <div class="step-dot" id="dot-1"></div>
+    <div class="step-dot" id="dot-2"></div>
+    <div class="step-dot" id="dot-3"></div>
+  </div>
+
+  <!-- Paso 1 -->
+  <div class="wizard-step active" id="step-1">
+    <div class="step-header">
+      <div class="step-num">Paso 1 de 3</div>
+      <h2>¿Qué producto viste?</h2>
+      <p>Buscá el nombre</p>
+    </div>
+    <input class="big-search" id="prod-search" placeholder="Ej: azúcar, leche, aceite..." oninput="searchProdStep(this.value)" autocomplete="off"/>
+    <div class="option-list" id="prod-results"></div>
+    <div id="new-prod-area" style="display:none;padding:0 16px">
+      <p style="color:var(--muted);font-size:.85rem;margin-bottom:8px">¿No encontrás el producto? Agregalo:</p>
+      <input class="big-search" style="margin-left:0;width:100%" id="np-name" placeholder="Nombre"/>
+      <select class="big-search" style="margin-left:0;width:100%" id="np-cat">
+        <option value="">Categoría...</option>
+        <option>Almacén</option><option>Lácteos</option><option>Bebidas</option>
+        <option>Panadería</option><option>Limpieza</option><option>Higiene</option>
+        <option>Verdulería</option><option>Carnicería</option><option>General</option>
+      </select>
+      <select class="big-search" style="margin-left:0;width:100%;margin-bottom:12px" id="np-unit">
+        <option value="unidad">Unidad</option><option value="kg">Kg</option>
+        <option value="lt">Litro</option><option value="500ml">500ml</option><option value="pack">Pack</option>
+      </select>
+      <button class="btn-next" style="margin:0 0 16px" onclick="createAndSelectProd()">Agregar producto</button>
+    </div>
+  </div>
+
+  <!-- Paso 2 -->
+  <div class="wizard-step" id="step-2">
+    <div class="step-header">
+      <div class="step-num">Paso 2 de 3</div>
+      <h2>¿En qué negocio?</h2>
+      <p>¿Dónde viste ese precio?</p>
+    </div>
+    <input class="big-search" id="biz-search" placeholder="Ej: Almacén Sol, kiosco..." oninput="searchBizStep(this.value)" autocomplete="off"/>
+    <div class="option-list" id="biz-results"></div>
+    <div id="new-biz-area" style="display:none;padding:0 16px">
+      <div style="background:#fff8e1;border-radius:14px;padding:14px;margin-bottom:12px;display:flex;gap:10px;align-items:flex-start">
+        <div style="font-size:1.4rem">📍</div>
+        <div>
+          <div style="font-weight:700;font-size:.9rem;margin-bottom:2px">Primero marcá la ubicación</div>
+          <div style="color:var(--muted);font-size:.82rem">Para agregar un negocio necesitamos saber dónde está en el mapa</div>
+        </div>
+      </div>
+      <input class="big-search" style="margin-left:0;width:100%" id="nb-name" placeholder="Nombre del negocio"/>
+      <select class="big-search" style="margin-left:0;width:100%;margin-bottom:12px" id="nb-cat">
+        <option>Almacén</option><option>Supermercado</option><option>Kiosco</option>
+        <option>Verdulería</option><option>Minimarket</option><option>Farmacia</option>
+      </select>
+      <button class="btn-next" style="margin:0 0 8px;background:#f39c12" onclick="startWizardBizPlacement()">
+        📍 Marcar en el mapa y agregar
+      </button>
+      <p style="text-align:center;color:var(--muted);font-size:.78rem;margin-bottom:12px">Vas a poder arrastrar el pin a la ubicación exacta</p>
+    </div>
+    <button class="btn-back" onclick="goStep(1)">← Volver</button>
+  </div>
+
+  <!-- Paso 3 -->
+  <div class="wizard-step" id="step-3">
+    <div class="step-header">
+      <div class="step-num">Paso 3 de 3</div>
+      <h2>¿Cuánto cuesta?</h2>
+      <p id="step3-context" style="font-weight:600;color:var(--green)"></p>
+    </div>
+    <div class="currency-label">$ Pesos argentinos</div>
+    <input class="price-input-big" id="price-val" type="number" min="0" step="any" placeholder="0"/>
+    <div class="extras-row" style="margin-top:20px">
+      <div class="extra-chip" id="chip-promo" onclick="toggleChip('promo')">🏷️ Es oferta</div>
+      <div class="extra-chip" id="chip-stock" onclick="toggleChip('stock')">📦 Sin stock</div>
+    </div>
+    <button class="btn-next" onclick="submitReport()">
+      <i class="fa fa-paper-plane me-2"></i>Publicar precio
+    </button>
+    <button class="btn-back" onclick="goStep(2)">← Volver</button>
+  </div>
+
+  <!-- Resultado -->
+  <div class="wizard-step" id="step-4">
+    <div class="result-hero">
+      <div style="font-size:3rem;margin-bottom:8px">🎉</div>
+      <div class="big-price" id="res-price"></div>
+      <div class="prod-title" id="res-label"></div>
+    </div>
+    <div class="pad">
+      <div id="res-msg" style="text-align:center;color:var(--muted);margin-bottom:16px;font-size:.95rem"></div>
+      <div style="background:var(--green-light);border-radius:14px;padding:14px 16px;margin-bottom:16px;display:flex;align-items:center;gap:10px">
+        <div style="font-size:1.6rem">⭐</div>
+        <div>
+          <div style="font-weight:700">+<span id="res-pts">0</span> puntos ganados</div>
+          <div style="color:var(--muted);font-size:.82rem" id="res-badge"></div>
+        </div>
+      </div>
+      <button class="btn-next" onclick="resetReport()">Reportar otro precio</button>
+      <button class="btn-back" onclick="goTab('home')">← Ir al inicio</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══ RANKING ══ -->
+<div class="screen" id="screen-ranking">
+  <div class="pad">
+    <!-- Sub-tabs -->
+    <div style="display:flex;background:#f0f0f0;border-radius:12px;padding:4px;margin-bottom:14px;gap:4px">
+      <button id="rtab-precios" onclick="switchRankTab('precios')" style="flex:1;padding:9px;border-radius:9px;border:none;background:var(--green);color:#fff;font-weight:700;font-size:.88rem;cursor:pointer">💰 Precios</button>
+      <button id="rtab-comunidad" onclick="switchRankTab('comunidad')" style="flex:1;padding:9px;border-radius:9px;border:none;background:none;color:var(--muted);font-weight:700;font-size:.88rem;cursor:pointer">👥 Comunidad</button>
+    </div>
+
+    <!-- Panel precios -->
+    <div id="rpanel-precios">
+      <div style="display:flex;gap:8px;margin-bottom:12px;align-items:center">
+        <button id="rank-zone-btn" onclick="toggleRankZone()" style="flex-shrink:0;background:#fff;color:var(--green);border:2px solid var(--green);border-radius:20px;padding:6px 14px;font-size:.82rem;font-weight:700;cursor:pointer">
+          🌍 Todo el país
+        </button>
+        <span style="color:var(--muted);font-size:.8rem" id="rank-zone-label">Tocá para ver solo tu zona</span>
+      </div>
+      <div class="pill-row" id="ranking-pills" style="margin-bottom:12px"></div>
+      <div id="ranking-list"><div class="loader"><i class="fa fa-circle-notch fa-spin"></i></div></div>
+    </div>
+
+    <!-- Panel comunidad -->
+    <div id="rpanel-comunidad" style="display:none">
+      <p style="color:var(--muted);font-size:.85rem;margin-bottom:14px">Los vecinos que más ayudan al barrio</p>
+      <div id="community-list"><div class="loader"><i class="fa fa-circle-notch fa-spin"></i></div></div>
+    </div>
+  </div>
+</div>
+
+<!-- ══ PERFIL ══ -->
+<div class="screen" id="screen-perfil">
+  <div id="pf-out">
+    <div class="empty">
+      <div class="empty-icon">👤</div>
+      <h3>Todavía no iniciaste sesión</h3>
+      <p>Creá tu cuenta gratis para reportar precios y ganar puntos</p>
+      <button class="btn-next" style="width:auto;padding:14px 28px;margin:20px auto 0" onclick="openAuth('reg')">Crear cuenta gratis</button>
+      <button class="btn-back" style="margin-top:8px" onclick="openAuth('login')">Ya tengo cuenta → Ingresar</button>
+    </div>
+  </div>
+  <div id="pf-in" style="display:none">
+    <div class="profile-hero">
+      <div class="avatar" id="pf-initial">?</div>
+      <div class="profile-name" id="pf-name">—</div>
+      <div class="profile-badge-pill" id="pf-badge">🏅 Nuevo Explorador</div>
+      <div class="pts-big" id="pf-pts">0</div>
+      <div class="pts-label">puntos acumulados</div>
+    </div>
+    <div class="stats-row">
+      <div class="stat-box"><div class="stat-n" id="pf-reports">0</div><div class="stat-l">Precios reportados</div></div>
+      <div class="stat-box"><div class="stat-n" id="pf-confirms">—</div><div class="stat-l">Confirmaciones</div></div>
+    </div>
+    <div class="pad" style="padding-bottom:4px"><div class="label">Cómo ganar puntos</div></div>
+    <div class="info-card">
+      <div class="info-row"><div style="font-size:1.4rem">🆕</div><div><div style="font-weight:700">Nuevo precio</div><div style="color:var(--muted);font-size:.82rem">+10 puntos</div></div></div>
+      <div class="info-row"><div style="font-size:1.4rem">✅</div><div><div style="font-weight:700">Confirmar un precio</div><div style="color:var(--muted);font-size:.82rem">+3 puntos</div></div></div>
+      <div class="info-row"><div style="font-size:1.4rem">📝</div><div><div style="font-weight:700">Actualizar un precio</div><div style="color:var(--muted);font-size:.82rem">+8 puntos</div></div></div>
+      <div class="info-row"><div style="font-size:1.4rem">🏪</div><div><div style="font-weight:700">Verificar un negocio</div><div style="color:var(--muted);font-size:.82rem">+15 puntos</div></div></div>
+    </div>
+    <div class="pad" style="padding-bottom:4px"><div class="label">Niveles y beneficios</div></div>
+    <div class="info-card" id="levels-list"></div>
+    <div class="pad" style="padding-bottom:4px"><div class="label">¿Para qué sirven los puntos?</div></div>
+    <div class="info-card">
+      <div class="info-row">
+        <div style="font-size:1.4rem">🔓</div>
+        <div><div style="font-weight:700">50 pts — Reportero Activo</div><div style="color:var(--muted);font-size:.82rem">Podés editar el nombre o dirección de un negocio</div></div>
+      </div>
+      <div class="info-row">
+        <div style="font-size:1.4rem">⭐</div>
+        <div><div style="font-weight:700">200 pts — Cazador Experto</div><div style="color:var(--muted);font-size:.82rem">Podés marcar negocios como verificados para que todos confíen más</div></div>
+      </div>
+      <div class="info-row">
+        <div style="font-size:1.4rem">👑</div>
+        <div><div style="font-weight:700">500 pts — Maestro de Precios</div><div style="color:var(--muted);font-size:.82rem">Tu nivel aparece en las tarjetas y le da más credibilidad a tus reportes</div></div>
+      </div>
+    </div>
+    <div class="pad">
+      <button style="width:100%;padding:14px;border-radius:12px;border:1.5px solid #eee;background:#fff;color:var(--red);font-weight:600;cursor:pointer" onclick="logout()">
+        <i class="fa fa-right-from-bracket me-2"></i>Cerrar sesión
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- ══ BOTTOM NAV ══ -->
+<nav class="bottom-nav">
+  <button class="nav-item active" id="nav-home" onclick="goTab('home')"><i class="fa fa-house"></i><span>Inicio</span></button>
+  <button class="nav-item" id="nav-mapa" onclick="goTab('mapa')"><i class="fa fa-map-location-dot"></i><span>Mapa</span></button>
+  <button class="nav-item" id="nav-report" onclick="goTab('report')"><div class="nav-fab"><i class="fa fa-plus"></i></div><span style="margin-top:6px;font-size:.65rem;color:var(--green);font-weight:700">Cargar</span></button>
+  <button class="nav-item" id="nav-ranking" onclick="goTab('ranking')"><i class="fa fa-trophy"></i><span>Ranking</span></button>
+  <button class="nav-item" id="nav-perfil" onclick="goTab('perfil')"><i class="fa fa-user-circle"></i><span>Yo</span></button>
+</nav>
+
+<!-- ══ DETAIL SHEET ══ -->
+<div class="detail-bg" id="detail-bg" onclick="closeDetail(event)">
+  <div class="detail-box" onclick="e=>e.stopPropagation()">
+    <div class="detail-handle"></div>
+    <div class="detail-header">
+      <div class="detail-title" id="det-title">—</div>
+      <div class="detail-sub" id="det-sub">—</div>
+    </div>
+    <div class="detail-body" id="det-body"></div>
+  </div>
+</div>
+
+<!-- ══ AUTH SHEET ══ -->
+<div class="sheet-bg" id="auth-bg" onclick="closeAuth(event)">
+  <div class="sheet-box" onclick="event.stopPropagation()">
+    <div class="sheet-handle"></div>
+    <div style="font-size:1.3rem;font-weight:800;margin-bottom:16px">🏷️ Comprecio</div>
+    <div class="auth-tabs">
+      <button class="auth-tab active" id="atab-login" onclick="switchAuth('login')">Ingresar</button>
+      <button class="auth-tab" id="atab-reg" onclick="switchAuth('reg')">Crear cuenta</button>
+    </div>
+    <div id="auth-login-form">
+      <div class="auth-err" id="login-err"></div>
+      <input class="form-inp" id="l-email" type="email" placeholder="Email"/>
+      <input class="form-inp" id="l-pass" type="password" placeholder="Contraseña"/>
+      <button class="btn-auth" onclick="doLogin()">Ingresar</button>
+    </div>
+    <div id="auth-reg-form" style="display:none">
+      <div class="auth-err" id="reg-err"></div>
+      <input class="form-inp" id="r-name" placeholder="Tu nombre"/>
+      <input class="form-inp" id="r-email" type="email" placeholder="Email"/>
+      <input class="form-inp" id="r-pass" type="password" placeholder="Contraseña (mín. 6 caracteres)"/>
+      <select class="form-sel" id="r-role">
+        <option value="consumer">🛒 Soy consumidor — busco precios</option>
+        <option value="merchant">🏪 Tengo un negocio</option>
+      </select>
+      <button class="btn-auth" onclick="doRegister()">Crear cuenta gratis</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══ AGREGAR NEGOCIO SHEET ══ -->
+<div class="sheet-bg" id="addbiz-bg" onclick="closeAddBiz(event)">
+  <div class="sheet-box" onclick="event.stopPropagation()" style="padding-bottom:36px">
+    <div class="sheet-handle"></div>
+    <div style="font-size:1.2rem;font-weight:800;margin-bottom:4px">🏪 Datos del negocio</div>
+    <p style="color:var(--muted);font-size:.88rem;margin-bottom:16px">La ubicación ya fue marcada en el mapa ✅</p>
+
+    <!-- Ubicación confirmada (solo lectura) -->
+    <div style="background:var(--green-light);border-radius:12px;padding:12px 14px;margin-bottom:14px;display:flex;align-items:center;gap:10px">
+      <div style="font-size:1.4rem">📍</div>
+      <div>
+        <div style="font-weight:700;font-size:.88rem;color:var(--green)">Ubicación marcada</div>
+        <div id="ab-coords-label" style="color:var(--muted);font-size:.78rem">—</div>
+      </div>
+    </div>
+
+    <input class="form-inp" id="ab-name" placeholder="Nombre del negocio *" />
+
+    <select class="form-sel" id="ab-cat">
+      <option value="">Tipo de negocio...</option>
+      <option>Almacén</option>
+      <option>Supermercado</option>
+      <option>Kiosco</option>
+      <option>Verdulería</option>
+      <option>Carnicería</option>
+      <option>Panadería</option>
+      <option>Minimarket</option>
+      <option>Farmacia</option>
+      <option>Ferretería</option>
+      <option>Comercio General</option>
+    </select>
+
+    <input class="form-inp" id="ab-address" placeholder="Dirección (opcional, ej: Av. Corrientes 1234)" />
+
+    <input type="hidden" id="ab-lat" />
+    <input type="hidden" id="ab-lng" />
+
+    <div id="ab-error" style="color:var(--red);font-size:.85rem;margin-bottom:8px;display:none"></div>
+    <button class="btn-auth" onclick="submitAddBiz()">
+      <i class="fa fa-check me-2"></i>Agregar al mapa
+    </button>
+  </div>
+</div>
+
+<!-- TOAST -->
+<div class="my-toast" id="my-toast"></div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="/js/app.js"></script>
+</body>
+</html>
