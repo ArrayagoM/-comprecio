@@ -59,3 +59,4 @@ comprecio-app/
     ├── index.html     # Frontend SPA
     └── js/app.js      # Lógica del frontend
 ```
+# -comprecio
