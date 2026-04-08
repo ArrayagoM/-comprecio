@@ -22,10 +22,10 @@ router.post('/register', async (req, res) => {
       [name, email.toLowerCase().trim(), hash, userRole]
     );
     const user = await db.get(
-      'SELECT id, name, email, role, points, badge FROM users WHERE id = ?',
+      'SELECT id, name, email, role, points, badge, blocked FROM users WHERE id = ?',
       [result.lastID]
     );
-    const token = jwt.sign({ id: user.id, email: user.email, role: user.role }, SECRET, { expiresIn: '7d' });
+    const token = jwt.sign({ id: user.id, email: user.email, role: user.role, blocked: user.blocked }, SECRET, { expiresIn: '7d' });
     res.json({ token, user });
   } catch (err) {
     if (err.message.includes('UNIQUE') || err.message.includes('unique') || err.message.includes('duplicate')) {
@@ -47,8 +47,9 @@ router.post('/login', async (req, res) => {
 
     const ok = await bcrypt.compare(password, user.password);
     if (!ok) return res.status(401).json({ error: 'Credenciales incorrectas' });
+    if (user.blocked) return res.status(403).json({ error: 'Tu cuenta está bloqueada' });
 
-    const token = jwt.sign({ id: user.id, email: user.email, role: user.role }, SECRET, { expiresIn: '7d' });
+    const token = jwt.sign({ id: user.id, email: user.email, role: user.role, blocked: user.blocked }, SECRET, { expiresIn: '7d' });
     const { password: _, ...safeUser } = user;
     res.json({ token, user: safeUser });
   } catch (err) {

@@ -16,6 +16,7 @@ app.use('/api/products',   require('./src/routes/products'));
 app.use('/api/businesses', require('./src/routes/businesses'));
 app.use('/api/prices',     require('./src/routes/prices'));
 app.use('/api/ranking',    require('./src/routes/ranking'));
+app.use('/api/admin',      require('./src/routes/admin'));
 
 // SPA fallback
 app.get('*', (req, res) => {

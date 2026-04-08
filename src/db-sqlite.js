@@ -99,6 +99,17 @@ async function initDB() {
   dbWrapper = createWrapper();
   createSchema();
   seedIfEmpty();
+  setAdminFromEnv();
+}
+
+function setAdminFromEnv() {
+  const adminEmail = process.env.ADMIN_EMAIL;
+  if (!adminEmail) return;
+  try {
+    sqlDb.run("UPDATE users SET role = 'admin' WHERE email = ?", [adminEmail.toLowerCase().trim()]);
+    saveDb();
+    console.log(`👑 Admin asignado: ${adminEmail}`);
+  } catch (e) { /* ignorar */ }
 }
 
 function createSchema() {
@@ -111,6 +122,7 @@ function createSchema() {
       role TEXT DEFAULT 'consumer',
       points INTEGER DEFAULT 0,
       badge TEXT DEFAULT 'Nuevo Explorador',
+      blocked INTEGER DEFAULT 0,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
     CREATE TABLE IF NOT EXISTS businesses (

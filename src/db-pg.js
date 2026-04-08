@@ -77,6 +77,19 @@ async function initDB() {
   dbWrapper = createPgWrapper();
   await createSchema();
   await seedIfEmpty();
+  await setAdminFromEnv();
+}
+
+async function setAdminFromEnv() {
+  const adminEmail = process.env.ADMIN_EMAIL;
+  if (!adminEmail) return;
+  try {
+    await pool.query(
+      "UPDATE users SET role = 'admin' WHERE email = $1",
+      [adminEmail.toLowerCase().trim()]
+    );
+    console.log(`👑 Admin asignado: ${adminEmail}`);
+  } catch (e) { /* ignorar */ }
 }
 
 async function createSchema() {
@@ -89,6 +102,7 @@ async function createSchema() {
       role TEXT DEFAULT 'consumer',
       points INTEGER DEFAULT 0,
       badge TEXT DEFAULT 'Nuevo Explorador',
+      blocked INTEGER DEFAULT 0,
       created_at TIMESTAMP DEFAULT NOW()
     );
     CREATE TABLE IF NOT EXISTS businesses (

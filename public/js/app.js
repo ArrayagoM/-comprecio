@@ -82,6 +82,10 @@ function goTab(name) {
     if (!token) { openAuth(); return; }
     resetReport();
   }
+  if (name === 'admin') {
+    if (!currentUser || currentUser.role !== 'admin') { goTab('home'); toast('Acceso denegado', 'err'); return; }
+    adminTab('stats');
+  }
   window.scrollTo(0, 0);
 }
 
@@ -797,6 +801,9 @@ function updateChip() {
   const label = document.getElementById('chip-label');
   if (currentUser) label.textContent = `${currentUser.name.split(' ')[0]} · ${currentUser.points || 0}pts`;
   else label.textContent = 'Ingresar';
+  // Mostrar/ocultar botón admin
+  const adminBtn = document.getElementById('nav-admin');
+  if (adminBtn) adminBtn.style.display = (currentUser && currentUser.role === 'admin') ? 'flex' : 'none';
 }
 
 // ── AGREGAR NEGOCIO CON PIN ARRASTRABLE ──────────
@@ -1131,5 +1138,241 @@ async function confirmWizardPlacement() {
     wizardBizPending = null;
     toast(err.message.includes('Ya existe') ? '⚠️ Ya existe ese negocio ahí' : err.message, 'err');
     goTab('report');
+  }
+}
+
+// ═══════════════════════════════════════════════
+// ADMIN PANEL
+// ═══════════════════════════════════════════════
+let adminCurrentTab = 'stats';
+let adminUsersCache = [];
+
+function adminTab(name) {
+  adminCurrentTab = name;
+  ['stats', 'users', 'activity', 'bizz'].forEach(t => {
+    document.getElementById('apanel-' + t).style.display = t === name ? 'block' : 'none';
+    const btn = document.getElementById('atab-' + t);
+    btn.style.background = t === name ? '#1a1a2e' : 'none';
+    btn.style.color = t === name ? '#fff' : '#888';
+  });
+  if (name === 'stats')    loadAdminStats();
+  if (name === 'users')    loadAdminUsers();
+  if (name === 'activity') loadAdminActivity();
+  if (name === 'bizz')     loadAdminBizz();
+}
+
+// ── STATS ────────────────────────────────────────
+async function loadAdminStats() {
+  const grid = document.getElementById('admin-stats-grid');
+  grid.innerHTML = '<div class="loader"><i class="fa fa-circle-notch fa-spin"></i></div>';
+  try {
+    const s = await api('GET', '/admin/stats');
+    grid.innerHTML = [
+      ['👥', 'Usuarios',       s.users],
+      ['🏪', 'Negocios',       s.businesses],
+      ['📦', 'Productos',      s.products],
+      ['💰', 'Precios totales', s.prices],
+      ['⚡', 'Precios hoy',    s.prices_hoy],
+      ['👍', 'Reacciones',     s.reacciones],
+    ].map(([icon, label, val]) => `
+      <div style="background:#fff;border-radius:14px;padding:16px;text-align:center;box-shadow:0 2px 8px rgba(0,0,0,.06)">
+        <div style="font-size:1.6rem;margin-bottom:4px">${icon}</div>
+        <div style="font-size:1.5rem;font-weight:900;color:#1a1a2e">${val}</div>
+        <div style="font-size:.72rem;color:#888;margin-top:2px">${label}</div>
+      </div>`).join('');
+  } catch (err) {
+    grid.innerHTML = `<div class="empty"><p>Error: ${err.message}</p></div>`;
+  }
+}
+
+// ── USUARIOS ─────────────────────────────────────
+async function loadAdminUsers() {
+  const list = document.getElementById('admin-users-list');
+  list.innerHTML = '<div class="loader"><i class="fa fa-circle-notch fa-spin"></i></div>';
+  try {
+    adminUsersCache = await api('GET', '/admin/users');
+    renderAdminUsers(adminUsersCache);
+  } catch (err) {
+    list.innerHTML = `<div class="empty"><p>Error: ${err.message}</p></div>`;
+  }
+}
+
+function filterAdminUsers(q) {
+  const filtered = q.length < 2
+    ? adminUsersCache
+    : adminUsersCache.filter(u =>
+        u.name.toLowerCase().includes(q.toLowerCase()) ||
+        u.email.toLowerCase().includes(q.toLowerCase())
+      );
+  renderAdminUsers(filtered);
+}
+
+function renderAdminUsers(users) {
+  const list = document.getElementById('admin-users-list');
+  if (!users.length) { list.innerHTML = '<div class="empty"><p>Sin resultados</p></div>'; return; }
+  list.innerHTML = users.map(u => `
+    <div style="background:#fff;border-radius:14px;padding:14px;margin-bottom:8px;box-shadow:0 2px 6px rgba(0,0,0,.05)">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px">
+        <div>
+          <div style="font-weight:700;font-size:.95rem">${esc(u.name)} ${u.blocked ? '🔒' : ''}</div>
+          <div style="color:#888;font-size:.78rem">${esc(u.email)}</div>
+        </div>
+        <span style="background:${u.role==='admin'?'#1a1a2e':u.role==='merchant'?'#fff3cd':'#e8f5ee'};color:${u.role==='admin'?'#fff':u.role==='merchant'?'#856404':'#155724'};border-radius:10px;padding:3px 9px;font-size:.72rem;font-weight:700">${u.role}</span>
+      </div>
+      <div style="display:flex;gap:8px;font-size:.75rem;color:#888;margin-bottom:10px">
+        <span>⭐ ${u.points} pts</span>
+        <span>💰 ${u.prices_count || 0} precios</span>
+        <span>👍 ${u.reactions_count || 0} reacciones</span>
+      </div>
+      <div style="display:flex;gap:6px">
+        <button onclick="openAdminEdit(${u.id})" style="flex:1;padding:7px;border-radius:8px;border:1.5px solid #1a1a2e;background:#fff;color:#1a1a2e;font-weight:700;font-size:.78rem;cursor:pointer">✏️ Editar</button>
+        <button onclick="toggleBlockUser(${u.id},${u.blocked?0:1})" style="flex:1;padding:7px;border-radius:8px;border:1.5px solid ${u.blocked?'#28a745':'#e74c3c'};background:${u.blocked?'#d4edda':'#fdecea'};color:${u.blocked?'#155724':'#c0392b'};font-weight:700;font-size:.78rem;cursor:pointer">${u.blocked?'🔓 Desbloquear':'🔒 Bloquear'}</button>
+        <button onclick="deleteAdminUser(${u.id},'${esc(u.name)}')" style="padding:7px 10px;border-radius:8px;border:1.5px solid #e74c3c;background:#fdecea;color:#c0392b;font-weight:700;font-size:.78rem;cursor:pointer">🗑️</button>
+      </div>
+    </div>`).join('');
+}
+
+function openAdminEdit(userId) {
+  const u = adminUsersCache.find(x => x.id === userId);
+  if (!u) return;
+  document.getElementById('edit-uid').value      = u.id;
+  document.getElementById('edit-uname').value    = u.name;
+  document.getElementById('edit-uemail').value   = u.email;
+  document.getElementById('edit-urole').value    = u.role;
+  document.getElementById('edit-upoints').value  = u.points;
+  document.getElementById('edit-ubadge').value   = u.badge || '';
+  document.getElementById('edit-ublocked').checked = !!u.blocked;
+  document.getElementById('admin-edit-bg').style.display = 'flex';
+}
+
+function closeAdminEdit() {
+  document.getElementById('admin-edit-bg').style.display = 'none';
+}
+
+async function saveAdminUser() {
+  const id      = document.getElementById('edit-uid').value;
+  const name    = document.getElementById('edit-uname').value.trim();
+  const email   = document.getElementById('edit-uemail').value.trim();
+  const role    = document.getElementById('edit-urole').value;
+  const points  = parseInt(document.getElementById('edit-upoints').value) || 0;
+  const badge   = document.getElementById('edit-ubadge').value.trim();
+  const blocked = document.getElementById('edit-ublocked').checked;
+  try {
+    await api('PATCH', `/admin/users/${id}`, { name, email, role, points, badge, blocked });
+    toast('Usuario actualizado');
+    closeAdminEdit();
+    loadAdminUsers();
+  } catch (err) {
+    toast(err.message, 'err');
+  }
+}
+
+async function toggleBlockUser(userId, blockVal) {
+  try {
+    await api('PATCH', `/admin/users/${userId}`, { blocked: blockVal === 1 });
+    toast(blockVal ? '🔒 Usuario bloqueado' : '🔓 Usuario desbloqueado');
+    loadAdminUsers();
+  } catch (err) {
+    toast(err.message, 'err');
+  }
+}
+
+async function deleteAdminUser(userId, name) {
+  if (!confirm(`¿Eliminar al usuario "${name}"? Esta acción no se puede deshacer.`)) return;
+  try {
+    await api('DELETE', `/admin/users/${userId}`);
+    toast('Usuario eliminado');
+    loadAdminUsers();
+  } catch (err) {
+    toast(err.message, 'err');
+  }
+}
+
+// ── ACTIVIDAD ────────────────────────────────────
+async function loadAdminActivity() {
+  const list = document.getElementById('admin-activity-list');
+  list.innerHTML = '<div class="loader"><i class="fa fa-circle-notch fa-spin"></i></div>';
+  try {
+    const items = await api('GET', '/admin/activity');
+    if (!items.length) { list.innerHTML = '<div class="empty"><p>Sin actividad</p></div>'; return; }
+    list.innerHTML = items.map(p => `
+      <div style="background:#fff;border-radius:12px;padding:12px 14px;margin-bottom:8px;box-shadow:0 2px 6px rgba(0,0,0,.05);border-left:4px solid ${p.is_promotion?'#f39c12':'#1a7a4a'}">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start">
+          <div>
+            <div style="font-weight:700;font-size:.9rem">${esc(p.product_name)}</div>
+            <div style="color:#888;font-size:.78rem">en ${esc(p.business_name)}</div>
+            <div style="color:#888;font-size:.75rem;margin-top:2px">por <b>${esc(p.user_name)}</b></div>
+          </div>
+          <div style="text-align:right">
+            <div style="font-size:1.1rem;font-weight:900;color:#1a7a4a">$${Number(p.price).toLocaleString('es-AR')}</div>
+            <div style="font-size:.68rem;color:#aaa">${new Date(p.created_at).toLocaleDateString('es-AR')}</div>
+          </div>
+        </div>
+        <div style="margin-top:8px;text-align:right">
+          <button onclick="deleteAdminPrice(${p.id})" style="padding:5px 12px;border-radius:8px;border:1.5px solid #e74c3c;background:#fdecea;color:#c0392b;font-size:.75rem;font-weight:700;cursor:pointer">🗑️ Eliminar</button>
+        </div>
+      </div>`).join('');
+  } catch (err) {
+    list.innerHTML = `<div class="empty"><p>Error: ${err.message}</p></div>`;
+  }
+}
+
+async function deleteAdminPrice(priceId) {
+  if (!confirm('¿Eliminar este precio?')) return;
+  try {
+    await api('DELETE', `/admin/prices/${priceId}`);
+    toast('Precio eliminado');
+    loadAdminActivity();
+  } catch (err) {
+    toast(err.message, 'err');
+  }
+}
+
+// ── NEGOCIOS ─────────────────────────────────────
+async function loadAdminBizz() {
+  const list = document.getElementById('admin-bizz-list');
+  list.innerHTML = '<div class="loader"><i class="fa fa-circle-notch fa-spin"></i></div>';
+  try {
+    const items = await api('GET', '/admin/businesses');
+    if (!items.length) { list.innerHTML = '<div class="empty"><p>Sin negocios</p></div>'; return; }
+    list.innerHTML = items.map(b => `
+      <div style="background:#fff;border-radius:14px;padding:14px;margin-bottom:8px;box-shadow:0 2px 6px rgba(0,0,0,.05)">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px">
+          <div>
+            <div style="font-weight:700;font-size:.95rem">${esc(b.name)} ${b.verified?'⭐':''}</div>
+            <div style="color:#888;font-size:.78rem">${esc(b.category)} · ${b.prices_count || 0} precios</div>
+            ${b.owner_name ? `<div style="color:#888;font-size:.75rem">Dueño: ${esc(b.owner_name)}</div>` : ''}
+          </div>
+          <span style="background:${b.status==='open'?'#d4edda':'#f8d7da'};color:${b.status==='open'?'#155724':'#721c24'};border-radius:10px;padding:3px 9px;font-size:.72rem;font-weight:700">${b.status}</span>
+        </div>
+        <div style="display:flex;gap:6px">
+          <button onclick="toggleVerifyAdminBiz(${b.id},${b.verified})" style="flex:1;padding:7px;border-radius:8px;border:1.5px solid ${b.verified?'#888':'#f39c12'};background:${b.verified?'#f8f8f8':'#fff8e1'};color:${b.verified?'#888':'#856404'};font-weight:700;font-size:.78rem;cursor:pointer">${b.verified?'⭐ Quitar verif.':'⭐ Verificar'}</button>
+          <button onclick="deleteAdminBiz(${b.id},'${esc(b.name)}')" style="padding:7px 10px;border-radius:8px;border:1.5px solid #e74c3c;background:#fdecea;color:#c0392b;font-weight:700;font-size:.78rem;cursor:pointer">🗑️</button>
+        </div>
+      </div>`).join('');
+  } catch (err) {
+    list.innerHTML = `<div class="empty"><p>Error: ${err.message}</p></div>`;
+  }
+}
+
+async function toggleVerifyAdminBiz(bizId, currentVerified) {
+  try {
+    await api('PATCH', `/admin/businesses/${bizId}`, { verified: !currentVerified });
+    toast(currentVerified ? 'Verificación quitada' : '⭐ Negocio verificado');
+    loadAdminBizz();
+  } catch (err) {
+    toast(err.message, 'err');
+  }
+}
+
+async function deleteAdminBiz(bizId, name) {
+  if (!confirm(`¿Eliminar "${name}" y todos sus precios?`)) return;
+  try {
+    await api('DELETE', `/admin/businesses/${bizId}`);
+    toast('Negocio eliminado');
+    loadAdminBizz();
+    if (mapReady) loadMapData();
+  } catch (err) {
+    toast(err.message, 'err');
   }
 }
