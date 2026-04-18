@@ -3,149 +3,324 @@
 <head>
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0"/>
-  <title>Comprecio</title>
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet"/>
+  <title>Comprecio — Precios de tu barrio</title>
+  <meta name="description" content="La red social de precios del barrio. Compartí, compará y ahorrá con tu comunidad."/>
+  <meta name="theme-color" content="#059669"/>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800;900&display=swap" rel="stylesheet"/>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css"/>
   <style>
+    /* ═══ DESIGN SYSTEM ═══ */
     :root {
-      --green: #1a7a4a; --green2: #2ea865; --green-light: #e8f5ee;
-      --red: #e74c3c; --yellow: #f39c12; --gray: #f4f6f8;
-      --text: #1a1a1a; --muted: #888;
+      --green: #059669; --green2: #10b981; --green-light: #ecfdf5;
+      --green-glow: rgba(5,150,105,.15);
+      --red: #ef4444; --yellow: #f59e0b; --orange: #f97316;
+      --gray: #f0fdf4; --gray2: #f1f5f9; --surface: #ffffff;
+      --text: #0f172a; --text2: #334155; --muted: #94a3b8;
+      --border: #e2e8f0; --border-light: #f1f5f9;
+      --radius: 16px; --radius-sm: 12px; --radius-xs: 8px;
+      --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+      --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+      --shadow-sm: 0 1px 3px rgba(15,23,42,.04), 0 1px 2px rgba(15,23,42,.03);
+      --shadow-md: 0 4px 16px rgba(15,23,42,.06), 0 1px 4px rgba(15,23,42,.04);
+      --shadow-lg: 0 12px 40px rgba(15,23,42,.08), 0 4px 12px rgba(15,23,42,.04);
+      --shadow-green: 0 4px 20px rgba(5,150,105,.25);
     }
     * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
     body {
-      background: var(--gray); font-family: 'Segoe UI', system-ui, sans-serif;
+      background: var(--gray); font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
       color: var(--text); max-width: 480px; margin: 0 auto;
-      min-height: 100vh; padding-bottom: 80px;
+      min-height: 100dvh; padding-bottom: 88px;
+      -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale;
+      font-variant-numeric: tabular-nums;
     }
 
-    /* TOP BAR */
-    .topbar { background: var(--green); padding: 14px 16px 12px; position: sticky; top: 0; z-index: 200; }
-    .topbar-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
-    .app-logo { color: #fff; font-weight: 900; font-size: 1.4rem; letter-spacing: -.5px; }
-    .app-logo span { color: #a8e6c3; }
-    .user-chip { background: rgba(255,255,255,.15); color: #fff; border-radius: 20px; padding: 5px 12px; font-size: .82rem; border: none; cursor: pointer; }
+    /* ═══ TOP BAR ═══ */
+    .topbar {
+      background: linear-gradient(135deg, #059669 0%, #047857 100%);
+      padding: 16px 16px 14px; position: sticky; top: 0; z-index: 200;
+      box-shadow: 0 4px 24px rgba(5,150,105,.2);
+    }
+    .topbar-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+    .app-logo {
+      color: #fff; font-weight: 900; font-size: 1.5rem; letter-spacing: -.5px;
+      display: flex; align-items: center; gap: 6px;
+    }
+    .app-logo span { color: #6ee7b7; }
+    .user-chip {
+      background: rgba(255,255,255,.15); backdrop-filter: blur(8px);
+      color: #fff; border-radius: 24px; padding: 7px 16px; font-size: .82rem;
+      font-weight: 600; border: 1px solid rgba(255,255,255,.2);
+      cursor: pointer; transition: all .25s var(--ease-out);
+    }
+    .user-chip:active { transform: scale(.96); background: rgba(255,255,255,.25); }
     .search-wrap { position: relative; }
-    .search-input { width: 100%; padding: 12px 44px 12px 16px; border-radius: 12px; border: none; font-size: 1rem; outline: none; box-shadow: 0 2px 8px rgba(0,0,0,.12); }
+    .search-input {
+      width: 100%; padding: 13px 44px 13px 16px; border-radius: var(--radius-sm);
+      border: none; font-size: .95rem; outline: none; font-family: inherit;
+      background: rgba(255,255,255,.95); backdrop-filter: blur(8px);
+      box-shadow: 0 2px 12px rgba(0,0,0,.08);
+      transition: box-shadow .25s var(--ease-out);
+    }
+    .search-input:focus { box-shadow: 0 2px 12px rgba(0,0,0,.08), 0 0 0 3px rgba(255,255,255,.4); }
+    .search-input::placeholder { color: var(--muted); }
     .search-icon { position: absolute; right: 14px; top: 50%; transform: translateY(-50%); color: var(--muted); }
-    .search-suggestions { position: absolute; top: 100%; left: 0; right: 0; background: #fff; border-radius: 12px; z-index: 300; box-shadow: 0 8px 24px rgba(0,0,0,.15); overflow: hidden; margin-top: 4px; display: none; }
-    .sugg-item { padding: 12px 16px; cursor: pointer; border-bottom: 1px solid #f0f0f0; display: flex; align-items: center; gap: 10px; }
+    .search-suggestions {
+      position: absolute; top: 100%; left: 0; right: 0; background: #fff;
+      border-radius: var(--radius-sm); z-index: 300;
+      box-shadow: var(--shadow-lg); overflow: hidden; margin-top: 6px; display: none;
+      border: 1px solid var(--border-light);
+    }
+    .sugg-item {
+      padding: 12px 16px; cursor: pointer; border-bottom: 1px solid var(--border-light);
+      display: flex; align-items: center; gap: 10px;
+      transition: background .15s var(--ease-out);
+    }
     .sugg-item:last-child { border-bottom: none; }
     .sugg-item:hover, .sugg-item:active { background: var(--green-light); }
 
-    /* SCREENS */
+    /* ═══ SCREENS ═══ */
     .screen { display: none; }
-    .screen.active { display: block; animation: fadeInScreen .22s ease; }
+    .screen.active { display: block; animation: fadeInScreen .35s var(--ease-out); }
 
-    /* BOTTOM NAV */
-    .bottom-nav { position: fixed; bottom: 0; left: 50%; transform: translateX(-50%); width: 100%; max-width: 480px; background: #fff; border-top: 1px solid #e9ecef; display: flex; z-index: 200; box-shadow: 0 -4px 16px rgba(0,0,0,.06); }
-    .nav-item { flex: 1; display: flex; flex-direction: column; align-items: center; padding: 10px 0 8px; border: none; background: none; cursor: pointer; color: var(--muted); font-size: .7rem; gap: 3px; transition: color .15s; }
-    .nav-item i { font-size: 1.3rem; }
+    /* ═══ BOTTOM NAV — Floating Island ═══ */
+    .bottom-nav {
+      position: fixed; bottom: 12px; left: 50%; transform: translateX(-50%);
+      width: calc(100% - 24px); max-width: 456px;
+      background: rgba(255,255,255,.92); backdrop-filter: blur(20px) saturate(180%);
+      -webkit-backdrop-filter: blur(20px) saturate(180%);
+      border: 1px solid rgba(255,255,255,.6);
+      border-radius: 20px; display: flex; z-index: 200;
+      box-shadow: 0 8px 32px rgba(15,23,42,.1), 0 2px 8px rgba(15,23,42,.05);
+    }
+    .nav-item {
+      flex: 1; display: flex; flex-direction: column; align-items: center;
+      padding: 10px 0 8px; border: none; background: none; cursor: pointer;
+      color: var(--muted); font-size: .68rem; font-weight: 600; gap: 2px;
+      transition: all .25s var(--ease-out); position: relative;
+    }
+    .nav-item i { font-size: 1.2rem; transition: transform .25s var(--ease-out); }
     .nav-item.active { color: var(--green); }
-    .nav-fab { background: var(--green); border-radius: 50%; width: 52px; height: 52px; display: flex; align-items: center; justify-content: center; color: #fff; font-size: 1.5rem; margin-top: -20px; box-shadow: 0 4px 16px rgba(26,122,74,.4); border: 3px solid #fff; }
+    .nav-item.active i { transform: scale(1.1) translateY(-1px); }
+    .nav-item.active::after {
+      content: ''; position: absolute; top: 4px; left: 50%; transform: translateX(-50%);
+      width: 4px; height: 4px; border-radius: 50%; background: var(--green);
+    }
+    .nav-fab {
+      background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+      border-radius: 50%; width: 50px; height: 50px;
+      display: flex; align-items: center; justify-content: center;
+      color: #fff; font-size: 1.4rem; margin-top: -18px;
+      box-shadow: var(--shadow-green); border: 3px solid #fff;
+      transition: transform .2s var(--ease-out), box-shadow .2s var(--ease-out);
+    }
+    .nav-item:active .nav-fab { transform: scale(.9); }
 
-    /* SECTION */
+    /* ═══ LAYOUT ═══ */
     .pad { padding: 16px; }
-    .pill-row { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 4px; }
+    .pill-row { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 4px; scroll-behavior: smooth; }
     .pill-row::-webkit-scrollbar { display: none; }
-    .pill { flex-shrink: 0; background: #fff; border: 1.5px solid #e0e0e0; border-radius: 20px; padding: 6px 14px; font-size: .82rem; cursor: pointer; white-space: nowrap; transition: all .15s; }
-    .pill.active, .pill:hover { background: var(--green); color: #fff; border-color: var(--green); }
-    .label-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
-    .label { font-weight: 700; font-size: 1rem; }
-    .label-link { color: var(--green); font-size: .85rem; cursor: pointer; }
+    .pill {
+      flex-shrink: 0; background: var(--surface); border: 1.5px solid var(--border);
+      border-radius: 24px; padding: 7px 16px; font-size: .82rem; font-weight: 600;
+      cursor: pointer; white-space: nowrap;
+      transition: all .25s var(--ease-out);
+    }
+    .pill.active, .pill:hover {
+      background: var(--green); color: #fff; border-color: var(--green);
+      box-shadow: var(--shadow-green);
+    }
+    .pill:active { transform: scale(.95); }
+    .label-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; }
+    .label { font-weight: 800; font-size: 1.05rem; letter-spacing: -.01em; }
+    .label-link { color: var(--green); font-size: .85rem; font-weight: 600; cursor: pointer; }
 
-    /* PRICE CARD */
-    .price-card { background: #fff; border-radius: 16px; padding: 16px; margin-bottom: 10px; box-shadow: 0 2px 8px rgba(0,0,0,.05); border-left: 4px solid var(--green); cursor: pointer; transition: transform .12s; }
-    .price-card:active { transform: scale(.98); }
-    .price-card.stale { border-left-color: var(--yellow); }
-    .price-card.nostock { border-left-color: #ccc; opacity: .7; }
+    /* ═══ PRICE CARD — Premium Design ═══ */
+    .price-card {
+      background: var(--surface); border-radius: var(--radius); padding: 16px;
+      margin-bottom: 10px; box-shadow: var(--shadow-sm);
+      border: 1px solid var(--border-light);
+      cursor: pointer; position: relative; overflow: hidden;
+      transition: transform .3s var(--ease-out), box-shadow .3s var(--ease-out);
+    }
+    .price-card::before {
+      content: ''; position: absolute; top: 0; left: 0; width: 4px; height: 100%;
+      background: linear-gradient(180deg, #10b981, #059669); border-radius: 0 4px 4px 0;
+    }
+    .price-card:active { transform: scale(.98); box-shadow: var(--shadow-sm); }
+    .price-card.stale::before { background: linear-gradient(180deg, #fbbf24, #f59e0b); }
+    .price-card.nostock { opacity: .6; }
+    .price-card.nostock::before { background: #cbd5e1; }
     .card-top { display: flex; justify-content: space-between; align-items: flex-start; }
-    .card-product { font-weight: 700; font-size: 1rem; }
-    .card-unit { color: var(--muted); font-size: .8rem; }
-    .card-store { color: var(--muted); font-size: .83rem; margin-top: 3px; }
-    .card-price { font-size: 1.6rem; font-weight: 900; color: var(--green); line-height: 1; }
-    .card-price.promo { color: var(--yellow); }
+    .card-product { font-weight: 700; font-size: 1rem; color: var(--text); }
+    .card-unit { color: var(--muted); font-size: .8rem; font-weight: 500; }
+    .card-store { color: var(--text2); font-size: .83rem; margin-top: 3px; }
+    .card-price {
+      font-size: 1.6rem; font-weight: 900; color: var(--green); line-height: 1;
+      letter-spacing: -.02em;
+    }
+    .card-price.promo { color: var(--orange); }
     .card-badges { display: flex; gap: 6px; margin-top: 10px; flex-wrap: wrap; align-items: center; }
-    .badge-f { background: #d4edda; color: #155724; border-radius: 10px; padding: 3px 9px; font-size: .72rem; font-weight: 600; }
-    .badge-r { background: #fff3cd; color: #856404; border-radius: 10px; padding: 3px 9px; font-size: .72rem; font-weight: 600; }
-    .badge-o { background: #f8d7da; color: #721c24; border-radius: 10px; padding: 3px 9px; font-size: .72rem; font-weight: 600; }
-    .badge-p { background: #fff3cd; color: #856404; border-radius: 10px; padding: 3px 9px; font-size: .72rem; font-weight: 600; }
-    .badge-c { color: var(--muted); font-size: .75rem; }
-    .react-row { display: flex; gap: 8px; margin-top: 10px; }
-    .react-btn { border: 1.5px solid #dee2e6; border-radius: 20px; padding: 5px 12px; font-size: .8rem; cursor: pointer; background: #fff; color: #555; transition: all .15s; flex: 1; text-align: center; }
-    .react-btn.ok { background: #d4edda; border-color: #28a745; color: #155724; }
-    .react-btn.bad { background: #f8d7da; border-color: #dc3545; color: #721c24; }
+    .badge-f { background: #dcfce7; color: #166534; border-radius: 8px; padding: 3px 10px; font-size: .72rem; font-weight: 700; }
+    .badge-r { background: #fef9c3; color: #854d0e; border-radius: 8px; padding: 3px 10px; font-size: .72rem; font-weight: 700; }
+    .badge-o { background: #fee2e2; color: #991b1b; border-radius: 8px; padding: 3px 10px; font-size: .72rem; font-weight: 700; }
+    .badge-p { background: #fef9c3; color: #854d0e; border-radius: 8px; padding: 3px 10px; font-size: .72rem; font-weight: 700; }
+    .badge-c { color: var(--muted); font-size: .75rem; font-weight: 500; }
+    .react-row { display: flex; gap: 8px; margin-top: 12px; }
+    .react-btn {
+      border: 1.5px solid var(--border); border-radius: var(--radius-sm);
+      padding: 8px 12px; font-size: .8rem; font-weight: 600; cursor: pointer;
+      background: var(--surface); color: var(--text2);
+      transition: all .2s var(--ease-out); flex: 1; text-align: center;
+    }
+    .react-btn:active { transform: scale(.96); }
+    .react-btn.ok { background: #dcfce7; border-color: #22c55e; color: #166534; }
+    .react-btn.bad { background: #fee2e2; border-color: #ef4444; color: #991b1b; }
 
-    /* EMPTY / LOADER */
-    .empty { text-align: center; padding: 48px 20px; color: var(--muted); }
-    .empty-icon { font-size: 3.5rem; margin-bottom: 12px; }
-    .empty h3 { font-size: 1.1rem; font-weight: 700; color: #555; margin-bottom: 6px; }
-    .empty p { font-size: .88rem; line-height: 1.5; }
+    /* ═══ EMPTY / LOADER ═══ */
+    .empty { text-align: center; padding: 56px 24px; color: var(--muted); }
+    .empty-icon { font-size: 3.5rem; margin-bottom: 16px; }
+    .empty h3 { font-size: 1.1rem; font-weight: 800; color: var(--text2); margin-bottom: 6px; }
+    .empty p { font-size: .88rem; line-height: 1.6; max-width: 260px; margin: 0 auto; }
     .loader { text-align: center; padding: 32px; color: var(--muted); }
 
-    /* WIZARD */
+    /* ═══ WIZARD ═══ */
     .wizard-step { display: none; }
-    .wizard-step.active { display: block; }
+    .wizard-step.active { display: block; animation: fadeInScreen .35s var(--ease-out); }
     .step-progress { display: flex; gap: 6px; padding: 14px 16px 0; }
-    .step-dot { flex: 1; height: 4px; border-radius: 4px; background: #e0e0e0; transition: background .3s; }
-    .step-dot.done { background: var(--green); }
-    .step-header { text-align: center; padding: 20px 16px 8px; }
-    .step-num { font-size: .75rem; color: var(--muted); font-weight: 700; text-transform: uppercase; letter-spacing: .5px; }
-    .step-header h2 { font-size: 1.4rem; font-weight: 800; margin: 6px 0 4px; }
+    .step-dot {
+      flex: 1; height: 4px; border-radius: 4px; background: var(--border);
+      transition: background .4s var(--ease-out), box-shadow .4s var(--ease-out);
+    }
+    .step-dot.done { background: var(--green); box-shadow: 0 0 8px var(--green-glow); }
+    .step-header { text-align: center; padding: 24px 16px 12px; }
+    .step-num { font-size: .72rem; color: var(--green); font-weight: 700; text-transform: uppercase; letter-spacing: 1px; }
+    .step-header h2 { font-size: 1.5rem; font-weight: 900; margin: 8px 0 4px; letter-spacing: -.02em; }
     .step-header p { color: var(--muted); font-size: .9rem; }
-    .big-search { display: block; width: calc(100% - 32px); margin: 0 16px 8px; padding: 14px 16px; border-radius: 14px; border: 2px solid #e0e0e0; font-size: 1rem; outline: none; transition: border-color .2s; }
-    .big-search:focus { border-color: var(--green); }
+    .big-search {
+      display: block; width: calc(100% - 32px); margin: 0 16px 8px;
+      padding: 14px 16px; border-radius: var(--radius-sm);
+      border: 2px solid var(--border); font-size: 1rem; font-family: inherit;
+      outline: none; transition: all .25s var(--ease-out); background: var(--surface);
+    }
+    .big-search:focus { border-color: var(--green); box-shadow: 0 0 0 4px var(--green-glow); }
     .option-list { padding: 0 16px; }
-    .option-item { background: #fff; border-radius: 14px; padding: 14px 16px; margin-bottom: 8px; cursor: pointer; border: 2px solid transparent; transition: all .15s; display: flex; align-items: center; gap: 12px; }
-    .option-item:active, .option-item.selected { border-color: var(--green); background: var(--green-light); }
+    .option-item {
+      background: var(--surface); border-radius: var(--radius-sm); padding: 14px 16px;
+      margin-bottom: 8px; cursor: pointer; border: 2px solid transparent;
+      transition: all .2s var(--ease-out); display: flex; align-items: center; gap: 12px;
+      box-shadow: var(--shadow-sm);
+    }
+    .option-item:active, .option-item.selected {
+      border-color: var(--green); background: var(--green-light);
+      transform: scale(.98);
+    }
     .option-icon { font-size: 1.3rem; }
     .option-label { font-weight: 700; font-size: .95rem; }
     .option-sub { color: var(--muted); font-size: .8rem; margin-top: 1px; }
-    .price-input-big { font-size: 3rem; font-weight: 900; color: var(--green); border: none; border-bottom: 3px solid var(--green); background: none; outline: none; width: 100%; text-align: center; padding: 8px 0; }
-    .price-input-big::placeholder { color: #ccc; }
-    .currency-label { text-align: center; color: var(--muted); font-size: 1rem; margin-bottom: 8px; }
-    .btn-next { display: block; width: calc(100% - 32px); margin: 16px auto; background: var(--green); color: #fff; border: none; border-radius: 14px; padding: 16px; font-size: 1rem; font-weight: 700; cursor: pointer; transition: background .15s; }
-    .btn-next:disabled { background: #ccc; cursor: not-allowed; }
-    .btn-next:not(:disabled):hover { background: #155e3a; }
-    .btn-back { display: block; width: calc(100% - 32px); margin: 0 auto 12px; background: transparent; color: var(--muted); border: none; border-radius: 14px; padding: 10px; font-size: .9rem; cursor: pointer; }
+    .price-input-big {
+      font-size: 3.2rem; font-weight: 900; color: var(--green);
+      border: none; border-bottom: 3px solid var(--green); background: none;
+      outline: none; width: 100%; text-align: center; padding: 8px 0;
+      font-family: inherit; letter-spacing: -.02em;
+    }
+    .price-input-big::placeholder { color: #d1d5db; }
+    .currency-label { text-align: center; color: var(--muted); font-size: 1rem; margin-bottom: 8px; font-weight: 500; }
+    .btn-next {
+      display: block; width: calc(100% - 32px); margin: 16px auto;
+      background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+      color: #fff; border: none; border-radius: var(--radius-sm);
+      padding: 16px; font-size: 1rem; font-weight: 700; font-family: inherit;
+      cursor: pointer; box-shadow: var(--shadow-green);
+      transition: all .25s var(--ease-out);
+    }
+    .btn-next:disabled { background: #cbd5e1; box-shadow: none; cursor: not-allowed; }
+    .btn-next:not(:disabled):active { transform: scale(.98); }
+    .btn-back {
+      display: block; width: calc(100% - 32px); margin: 0 auto 12px;
+      background: transparent; color: var(--muted); border: none;
+      border-radius: var(--radius-sm); padding: 10px; font-size: .9rem;
+      font-weight: 600; cursor: pointer; font-family: inherit;
+    }
     .extras-row { display: flex; gap: 10px; padding: 0 16px; margin-bottom: 8px; }
-    .extra-chip { flex: 1; border: 2px solid #e0e0e0; border-radius: 12px; padding: 10px; text-align: center; cursor: pointer; font-size: .82rem; font-weight: 600; transition: all .15s; background: #fff; }
-    .extra-chip.active { border-color: var(--yellow); background: #fff8e1; color: #856404; }
+    .extra-chip {
+      flex: 1; border: 2px solid var(--border); border-radius: var(--radius-sm);
+      padding: 10px; text-align: center; cursor: pointer; font-size: .82rem;
+      font-weight: 600; transition: all .2s var(--ease-out); background: var(--surface);
+    }
+    .extra-chip.active { border-color: var(--yellow); background: #fefce8; color: #854d0e; }
+    .extra-chip:active { transform: scale(.96); }
 
-    /* RESULT */
-    .result-hero { background: var(--green); color: #fff; text-align: center; padding: 32px 20px; }
-    .result-hero .big-price { font-size: 3.5rem; font-weight: 900; }
-    .result-hero .prod-title { font-size: 1.1rem; opacity: .9; }
+    /* ═══ RESULT ═══ */
+    .result-hero {
+      background: linear-gradient(135deg, #059669 0%, #047857 100%);
+      color: #fff; text-align: center; padding: 36px 20px;
+    }
+    .result-hero .big-price { font-size: 3.5rem; font-weight: 900; letter-spacing: -.03em; }
+    .result-hero .prod-title { font-size: 1.1rem; opacity: .9; font-weight: 500; }
 
-    /* MAP */
+    /* ═══ MAP ═══ */
     #map { height: 300px; }
     .map-overlay { padding: 10px 16px 0; }
 
-    /* RANKING */
-    .rank-item { background: #fff; border-radius: 16px; padding: 14px 16px; margin-bottom: 8px; box-shadow: 0 2px 8px rgba(0,0,0,.05); display: flex; align-items: center; gap: 12px; }
-    .rank-num { width: 34px; height: 34px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 900; font-size: .9rem; flex-shrink: 0; }
-    .r1 { background: #FFD700; color: #7b6000; }
-    .r2 { background: #C0C0C0; color: #555; }
-    .r3 { background: #CD7F32; color: #fff; }
+    /* ═══ RANKING ═══ */
+    .rank-item {
+      background: var(--surface); border-radius: var(--radius); padding: 14px 16px;
+      margin-bottom: 8px; box-shadow: var(--shadow-sm);
+      border: 1px solid var(--border-light);
+      display: flex; align-items: center; gap: 12px;
+      transition: transform .2s var(--ease-out);
+    }
+    .rank-item:active { transform: scale(.98); }
+    .rank-num {
+      width: 36px; height: 36px; border-radius: var(--radius-xs);
+      display: flex; align-items: center; justify-content: center;
+      font-weight: 900; font-size: .9rem; flex-shrink: 0;
+    }
+    .r1 { background: linear-gradient(135deg, #fde047, #facc15); color: #713f12; }
+    .r2 { background: linear-gradient(135deg, #e2e8f0, #cbd5e1); color: #475569; }
+    .r3 { background: linear-gradient(135deg, #fdba74, #f97316); color: #fff; }
     .rn { background: var(--green-light); color: var(--green); }
 
-    /* PROFILE */
-    .profile-hero { background: var(--green); padding: 28px 20px 24px; text-align: center; color: #fff; }
-    .avatar { width: 72px; height: 72px; border-radius: 50%; background: rgba(255,255,255,.2); color: #fff; font-size: 2rem; font-weight: 900; display: flex; align-items: center; justify-content: center; margin: 0 auto 12px; }
-    .profile-name { font-size: 1.3rem; font-weight: 800; }
-    .profile-badge-pill { display: inline-block; background: rgba(255,255,255,.2); border-radius: 20px; padding: 4px 14px; font-size: .82rem; margin-top: 6px; }
-    .pts-big { font-size: 2.4rem; font-weight: 900; margin-top: 8px; }
-    .pts-label { font-size: .82rem; opacity: .8; }
+    /* ═══ PROFILE ═══ */
+    .profile-hero {
+      background: linear-gradient(135deg, #059669 0%, #047857 100%);
+      padding: 32px 20px 28px; text-align: center; color: #fff;
+    }
+    .avatar {
+      width: 76px; height: 76px; border-radius: 50%;
+      background: rgba(255,255,255,.15); backdrop-filter: blur(8px);
+      border: 2px solid rgba(255,255,255,.3);
+      color: #fff; font-size: 2rem; font-weight: 900;
+      display: flex; align-items: center; justify-content: center;
+      margin: 0 auto 14px;
+    }
+    .profile-name { font-size: 1.35rem; font-weight: 800; letter-spacing: -.01em; }
+    .profile-badge-pill {
+      display: inline-block; background: rgba(255,255,255,.15);
+      backdrop-filter: blur(8px); border: 1px solid rgba(255,255,255,.2);
+      border-radius: 24px; padding: 5px 16px; font-size: .82rem; font-weight: 600; margin-top: 8px;
+    }
+    .pts-big { font-size: 2.6rem; font-weight: 900; margin-top: 10px; letter-spacing: -.02em; }
+    .pts-label { font-size: .82rem; opacity: .8; font-weight: 500; }
     .stats-row { display: flex; padding: 16px; gap: 10px; }
-    .stat-box { flex: 1; background: #fff; border-radius: 14px; padding: 14px 10px; text-align: center; }
+    .stat-box {
+      flex: 1; background: var(--surface); border-radius: var(--radius-sm);
+      padding: 16px 10px; text-align: center;
+      box-shadow: var(--shadow-sm); border: 1px solid var(--border-light);
+    }
     .stat-n { font-size: 1.6rem; font-weight: 900; color: var(--green); }
-    .stat-l { font-size: .75rem; color: var(--muted); margin-top: 2px; }
-    .info-card { background: #fff; border-radius: 14px; margin: 0 16px 12px; padding: 16px; }
-    .info-row { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+    .stat-l { font-size: .75rem; color: var(--muted); margin-top: 2px; font-weight: 500; }
+    .info-card {
+      background: var(--surface); border-radius: var(--radius-sm); margin: 0 16px 12px;
+      padding: 16px; box-shadow: var(--shadow-sm); border: 1px solid var(--border-light);
+    }
+    .info-row { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
     .info-row:last-child { margin-bottom: 0; }
 
-    /* ── ANIMACIONES ── */
+    /* ═══ ANIMATIONS — Premium Motion ═══ */
     @keyframes fadeInOverlay {
       from { opacity: 0; }
       to   { opacity: 1; }
@@ -163,11 +338,11 @@
       to   { transform: translateY(100%); }
     }
     @keyframes fadeInScreen {
-      from { opacity: 0; transform: translateY(10px); }
+      from { opacity: 0; transform: translateY(12px); }
       to   { opacity: 1; transform: translateY(0); }
     }
     @keyframes onboardingPop {
-      from { opacity: 0; transform: scale(.95) translateY(20px); }
+      from { opacity: 0; transform: scale(.92) translateY(24px); }
       to   { opacity: 1; transform: scale(1) translateY(0); }
     }
     @keyframes pinHint {
@@ -178,68 +353,137 @@
       80%  { transform: rotate(-45deg) translate(0,0); }
       100% { transform: rotate(-45deg) translate(0,0); }
     }
+    @keyframes shimmer {
+      0% { background-position: -200% 0; }
+      100% { background-position: 200% 0; }
+    }
+    @keyframes pulseGlow {
+      0%, 100% { box-shadow: 0 0 0 0 var(--green-glow); }
+      50% { box-shadow: 0 0 0 8px transparent; }
+    }
+    @keyframes floatUp {
+      from { opacity: 0; transform: translateY(20px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
 
-    /* AUTH SHEET */
+    /* ═══ SHEETS — Glass Morphism ═══ */
     .sheet-bg {
       position: fixed; inset: 0; background: rgba(0,0,0,0);
       z-index: 500; display: none; align-items: flex-end; justify-content: center;
-      transition: background .28s ease;
+      transition: background .3s var(--ease-out);
     }
-    .sheet-bg.open { display: flex; background: rgba(0,0,0,.48); animation: fadeInOverlay .25s ease; }
-    .sheet-bg.closing { animation: fadeOutOverlay .25s ease forwards; }
+    .sheet-bg.open { display: flex; background: rgba(15,23,42,.5); animation: fadeInOverlay .3s var(--ease-out); }
+    .sheet-bg.closing { animation: fadeOutOverlay .25s var(--ease-out) forwards; }
     .sheet-box {
-      background: #fff; border-radius: 20px 20px 0 0;
+      background: #fff; border-radius: 24px 24px 0 0;
       width: 100%; max-width: 480px; max-height: 90vh; overflow-y: auto;
       padding: 0 20px 32px;
-      transform: translateY(0);
-      animation: slideUp .32s cubic-bezier(.32,1,.4,1);
+      animation: slideUp .4s var(--ease-out);
     }
-    .sheet-bg.closing .sheet-box { animation: slideDown .25s ease forwards; }
-    .sheet-handle { width: 40px; height: 4px; background: #e0e0e0; border-radius: 4px; margin: 12px auto 16px; }
-    .auth-tabs { display: flex; gap: 0; background: var(--gray); border-radius: 10px; padding: 4px; margin-bottom: 16px; }
-    .auth-tab { flex: 1; text-align: center; padding: 8px; border-radius: 8px; cursor: pointer; font-weight: 600; font-size: .9rem; border: none; background: none; color: var(--muted); }
-    .auth-tab.active { background: #fff; color: var(--green); }
-    .form-inp { width: 100%; padding: 13px 14px; border-radius: 12px; border: 1.5px solid #e0e0e0; font-size: 1rem; outline: none; margin-bottom: 10px; transition: border-color .2s; }
-    .form-inp:focus { border-color: var(--green); }
-    .form-sel { width: 100%; padding: 13px 14px; border-radius: 12px; border: 1.5px solid #e0e0e0; font-size: 1rem; outline: none; margin-bottom: 10px; background: #fff; }
-    .btn-auth { width: 100%; padding: 14px; border-radius: 12px; border: none; background: var(--green); color: #fff; font-size: 1rem; font-weight: 700; cursor: pointer; margin-top: 4px; }
-    .auth-err { color: var(--red); font-size: .85rem; margin-bottom: 8px; display: none; }
+    .sheet-bg.closing .sheet-box { animation: slideDown .25s var(--ease-out) forwards; }
+    .sheet-handle { width: 36px; height: 4px; background: #e2e8f0; border-radius: 4px; margin: 12px auto 18px; }
+    .auth-tabs {
+      display: flex; gap: 0; background: var(--gray2); border-radius: var(--radius-sm);
+      padding: 4px; margin-bottom: 16px;
+    }
+    .auth-tab {
+      flex: 1; text-align: center; padding: 10px; border-radius: var(--radius-xs);
+      cursor: pointer; font-weight: 700; font-size: .9rem;
+      border: none; background: none; color: var(--muted); font-family: inherit;
+      transition: all .25s var(--ease-out);
+    }
+    .auth-tab.active { background: #fff; color: var(--green); box-shadow: var(--shadow-sm); }
+    .form-inp {
+      width: 100%; padding: 14px 16px; border-radius: var(--radius-sm);
+      border: 1.5px solid var(--border); font-size: 1rem; font-family: inherit;
+      outline: none; margin-bottom: 10px;
+      transition: all .25s var(--ease-out); background: var(--surface);
+    }
+    .form-inp:focus { border-color: var(--green); box-shadow: 0 0 0 4px var(--green-glow); }
+    .form-sel {
+      width: 100%; padding: 14px 16px; border-radius: var(--radius-sm);
+      border: 1.5px solid var(--border); font-size: 1rem; font-family: inherit;
+      outline: none; margin-bottom: 10px; background: var(--surface);
+      transition: all .25s var(--ease-out);
+    }
+    .form-sel:focus { border-color: var(--green); box-shadow: 0 0 0 4px var(--green-glow); }
+    .btn-auth {
+      width: 100%; padding: 15px; border-radius: var(--radius-sm); border: none;
+      background: linear-gradient(135deg, #10b981, #059669);
+      color: #fff; font-size: 1rem; font-weight: 700; font-family: inherit;
+      cursor: pointer; margin-top: 4px; box-shadow: var(--shadow-green);
+      transition: all .25s var(--ease-out);
+    }
+    .btn-auth:active { transform: scale(.98); }
+    .auth-err { color: var(--red); font-size: .85rem; font-weight: 600; margin-bottom: 8px; display: none; }
 
-    /* DETAIL SHEET */
+    /* ═══ DETAIL SHEET ═══ */
     .detail-bg {
       position: fixed; inset: 0; background: rgba(0,0,0,0);
       z-index: 400; display: none; align-items: flex-end; justify-content: center;
     }
-    .detail-bg.open { display: flex; background: rgba(0,0,0,.48); animation: fadeInOverlay .25s ease; }
-    .detail-bg.closing { animation: fadeOutOverlay .25s ease forwards; }
+    .detail-bg.open { display: flex; background: rgba(15,23,42,.5); animation: fadeInOverlay .3s var(--ease-out); }
+    .detail-bg.closing { animation: fadeOutOverlay .25s var(--ease-out) forwards; }
     .detail-box {
-      background: #fff; border-radius: 20px 20px 0 0;
+      background: #fff; border-radius: 24px 24px 0 0;
       width: 100%; max-width: 480px; max-height: 85vh; overflow-y: auto; padding: 0 0 32px;
-      animation: slideUp .32s cubic-bezier(.32,1,.4,1);
+      animation: slideUp .4s var(--ease-out);
     }
-    .detail-bg.closing .detail-box { animation: slideDown .25s ease forwards; }
-    .detail-handle { width: 40px; height: 4px; background: #e0e0e0; border-radius: 4px; margin: 12px auto 14px; }
-    .detail-header { padding: 0 20px 12px; border-bottom: 1px solid #f0f0f0; }
-    .detail-title { font-size: 1.15rem; font-weight: 800; }
-    .detail-sub { color: var(--muted); font-size: .85rem; margin-top: 2px; }
+    .detail-bg.closing .detail-box { animation: slideDown .25s var(--ease-out) forwards; }
+    .detail-handle { width: 36px; height: 4px; background: #e2e8f0; border-radius: 4px; margin: 12px auto 14px; }
+    .detail-header { padding: 0 20px 14px; border-bottom: 1px solid var(--border-light); }
+    .detail-title { font-size: 1.15rem; font-weight: 800; letter-spacing: -.01em; }
+    .detail-sub { color: var(--muted); font-size: .85rem; margin-top: 2px; font-weight: 500; }
     .detail-body { padding: 16px 20px 0; }
 
-    /* TOAST */
-    .my-toast { position: fixed; bottom: 90px; left: 50%; transform: translateX(-50%); background: #1a1a1a; color: #fff; border-radius: 12px; padding: 12px 20px; font-size: .9rem; font-weight: 600; z-index: 999; opacity: 0; transition: opacity .3s, transform .3s; transform: translateX(-50%) translateY(8px); white-space: nowrap; pointer-events: none; }
+    /* ═══ TOAST — Floating ═══ */
+    .my-toast {
+      position: fixed; bottom: 100px; left: 50%; transform: translateX(-50%) translateY(8px);
+      background: var(--text); color: #fff; border-radius: var(--radius-sm);
+      padding: 14px 22px; font-size: .88rem; font-weight: 600;
+      z-index: 999; opacity: 0;
+      transition: opacity .3s var(--ease-out), transform .3s var(--ease-out);
+      white-space: nowrap; pointer-events: none;
+      box-shadow: var(--shadow-lg);
+    }
     .my-toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
 
-    /* Nav item transition */
-    .nav-item { transition: color .18s; }
-    .nav-fab { transition: transform .15s, box-shadow .15s; }
-    .nav-item:active .nav-fab { transform: scale(.92); }
+    /* ═══ INTERACTION FEEDBACK ═══ */
+    .nav-item { transition: all .25s var(--ease-out); }
+    .nav-fab { transition: transform .2s var(--ease-out), box-shadow .2s var(--ease-out); }
+    .price-card { transition: transform .3s var(--ease-out), box-shadow .3s var(--ease-out); }
+    .pill { transition: all .25s var(--ease-out); }
+    .option-item { transition: all .2s var(--ease-out); }
 
-    /* Card hover/tap */
-    .price-card { transition: transform .12s, box-shadow .12s; }
-    .price-card:active { transform: scale(.98); box-shadow: 0 1px 4px rgba(0,0,0,.08); }
+    /* ═══ STAGGERED CARD ANIMATION ═══ */
+    .price-card, .rank-item, .option-item {
+      animation: floatUp .4s var(--ease-out) backwards;
+    }
+    .price-card:nth-child(1), .rank-item:nth-child(1) { animation-delay: 0ms; }
+    .price-card:nth-child(2), .rank-item:nth-child(2) { animation-delay: 50ms; }
+    .price-card:nth-child(3), .rank-item:nth-child(3) { animation-delay: 100ms; }
+    .price-card:nth-child(4), .rank-item:nth-child(4) { animation-delay: 150ms; }
+    .price-card:nth-child(5), .rank-item:nth-child(5) { animation-delay: 200ms; }
+    .price-card:nth-child(n+6), .rank-item:nth-child(n+6) { animation-delay: 250ms; }
 
-    /* Pill transition */
-    .pill { transition: all .18s ease; }
-    .option-item { transition: border-color .15s, background .15s; }
+    /* ═══ SKELETON LOADER ═══ */
+    .skeleton {
+      background: linear-gradient(90deg, #f1f5f9 25%, #e2e8f0 50%, #f1f5f9 75%);
+      background-size: 200% 100%; animation: shimmer 1.5s infinite;
+      border-radius: var(--radius-xs);
+    }
+
+    /* ═══ REDUCED MOTION ═══ */
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+      }
+    }
+
+    /* ═══ SCROLLBAR ═══ */
+    ::-webkit-scrollbar { width: 0; background: transparent; }
   </style>
 </head>
 <body>
@@ -247,52 +491,82 @@
 <!-- TOP BAR -->
 <div class="topbar">
   <div class="topbar-row">
-    <div class="app-logo">Compre<span>cio</span></div>
+    <div class="app-logo">
+      <span style="display:inline-flex;align-items:center;justify-content:center;width:32px;height:32px;border-radius:10px;background:rgba(255,255,255,.2);font-size:.9rem">💬</span>
+      Compre<span>cio</span>
+    </div>
     <button class="user-chip" onclick="onChipClick()">
-      <i class="fa fa-user me-1"></i><span id="chip-label">Ingresar</span>
+      <i class="fa fa-user" style="margin-right:5px;font-size:.75rem"></i><span id="chip-label">Ingresar</span>
     </button>
   </div>
   <div class="search-wrap">
-    <input class="search-input" id="global-search" placeholder="🔍  ¿Qué querés buscar?" oninput="onGlobalSearch(this.value)" autocomplete="off"/>
+    <input class="search-input" id="global-search" placeholder="Buscar productos, negocios..." oninput="onGlobalSearch(this.value)" autocomplete="off"/>
+    <i class="fa fa-search search-icon" style="font-size:.9rem"></i>
     <div class="search-suggestions" id="global-sugg"></div>
   </div>
 </div>
 
 <!-- ══ ONBOARDING ══ -->
-<div id="onboarding-bg" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:900;align-items:flex-end;justify-content:center;animation:fadeInOverlay .3s ease">
-  <div style="background:#fff;border-radius:24px 24px 0 0;width:100%;max-width:480px;padding:28px 24px 40px;animation:slideUp .38s cubic-bezier(.32,1,.4,1)">
-    <div style="text-align:center;margin-bottom:24px">
-      <div style="font-size:3rem;margin-bottom:12px">🏷️</div>
-      <div style="font-size:1.5rem;font-weight:900;color:var(--green);margin-bottom:8px">¡Bienvenido a Comprecio!</div>
-      <p style="color:#555;font-size:.95rem;line-height:1.5">La comunidad para encontrar los <strong>mejores precios</strong> de tu barrio.<br>Entre todos vemos dónde conviene comprar.</p>
+<div id="onboarding-bg" style="display:none;position:fixed;inset:0;background:rgba(15,23,42,.6);z-index:900;align-items:flex-end;justify-content:center;animation:fadeInOverlay .3s var(--ease-out);backdrop-filter:blur(4px)">
+  <div style="background:#fff;border-radius:28px 28px 0 0;width:100%;max-width:480px;padding:32px 24px 40px;animation:slideUp .45s var(--ease-out)">
+    <!-- Hero -->
+    <div style="text-align:center;margin-bottom:28px">
+      <div style="display:inline-flex;align-items:center;justify-content:center;width:72px;height:72px;border-radius:20px;background:linear-gradient(135deg,#ecfdf5,#d1fae5);margin-bottom:16px">
+        <span style="font-size:2.2rem">💬</span>
+      </div>
+      <div style="font-size:1.6rem;font-weight:900;color:var(--text);letter-spacing:-.02em;margin-bottom:6px">Tu barrio, mejores precios</div>
+      <p style="color:var(--text2);font-size:.92rem;line-height:1.6;max-width:300px;margin:0 auto">
+        <strong style="color:var(--green)">Comprecio</strong> es la red social donde los vecinos comparten y comparan precios del barrio.
+      </p>
     </div>
-    <div style="display:flex;flex-direction:column;gap:12px;margin-bottom:24px">
-      <div style="display:flex;align-items:center;gap:14px;background:var(--green-light);border-radius:14px;padding:14px">
-        <div style="font-size:1.8rem">🔍</div>
-        <div><div style="font-weight:700;font-size:.95rem">Buscá precios</div><div style="color:var(--muted);font-size:.82rem">Encontrá dónde está más barato lo que necesitás</div></div>
+    <!-- Features -->
+    <div style="display:flex;flex-direction:column;gap:10px;margin-bottom:28px">
+      <div style="display:flex;align-items:center;gap:14px;background:var(--green-light);border-radius:16px;padding:16px;animation:floatUp .5s var(--ease-out) .1s backwards">
+        <div style="width:44px;height:44px;border-radius:12px;background:linear-gradient(135deg,#10b981,#059669);display:flex;align-items:center;justify-content:center;flex-shrink:0">
+          <i class="fa fa-search" style="color:#fff;font-size:1rem"></i>
+        </div>
+        <div><div style="font-weight:700;font-size:.92rem;color:var(--text)">Encontrá lo mas barato</div><div style="color:var(--text2);font-size:.8rem">Precios reales cerca tuyo, actualizados por vecinos</div></div>
       </div>
-      <div style="display:flex;align-items:center;gap:14px;background:#fff8e1;border-radius:14px;padding:14px">
-        <div style="font-size:1.8rem">📸</div>
-        <div><div style="font-weight:700;font-size:.95rem">Cargá precios</div><div style="color:var(--muted);font-size:.82rem">Avisale al barrio cuánto cuesta algo que viste</div></div>
+      <div style="display:flex;align-items:center;gap:14px;background:#fefce8;border-radius:16px;padding:16px;animation:floatUp .5s var(--ease-out) .2s backwards">
+        <div style="width:44px;height:44px;border-radius:12px;background:linear-gradient(135deg,#fbbf24,#f59e0b);display:flex;align-items:center;justify-content:center;flex-shrink:0">
+          <i class="fa fa-tag" style="color:#fff;font-size:1rem"></i>
+        </div>
+        <div><div style="font-weight:700;font-size:.92rem;color:var(--text)">Compartí lo que ves</div><div style="color:var(--text2);font-size:.8rem">Cargá un precio en 10 segundos y ayudá al barrio</div></div>
       </div>
-      <div style="display:flex;align-items:center;gap:14px;background:#f3e8ff;border-radius:14px;padding:14px">
-        <div style="font-size:1.8rem">🏆</div>
-        <div><div style="font-weight:700;font-size:.95rem">Ganás puntos</div><div style="color:var(--muted);font-size:.82rem">Cada precio que cargás te suma puntos y medallas</div></div>
+      <div style="display:flex;align-items:center;gap:14px;background:#f0fdf4;border-radius:16px;padding:16px;animation:floatUp .5s var(--ease-out) .3s backwards">
+        <div style="width:44px;height:44px;border-radius:12px;background:linear-gradient(135deg,#34d399,#10b981);display:flex;align-items:center;justify-content:center;flex-shrink:0">
+          <i class="fa fa-users" style="color:#fff;font-size:1rem"></i>
+        </div>
+        <div><div style="font-weight:700;font-size:.92rem;color:var(--text)">Comunidad activa</div><div style="color:var(--text2);font-size:.8rem">Ganá puntos, subí de nivel y hacé crecer tu barrio</div></div>
       </div>
     </div>
-    <button onclick="closeOnboarding()" style="width:100%;padding:16px;border-radius:14px;border:none;background:var(--green);color:#fff;font-size:1.05rem;font-weight:800;cursor:pointer">
-      ¡Empezar! →
+    <!-- CTA -->
+    <button onclick="closeOnboarding()" style="width:100%;padding:17px;border-radius:14px;border:none;background:linear-gradient(135deg,#10b981,#059669);color:#fff;font-size:1.05rem;font-weight:800;cursor:pointer;font-family:inherit;box-shadow:0 4px 20px rgba(5,150,105,.3);transition:transform .2s var(--ease-out)">
+      Explorar precios del barrio
     </button>
+    <p style="text-align:center;color:var(--muted);font-size:.78rem;margin-top:12px;font-weight:500">Gratis y sin publicidad</p>
   </div>
 </div>
 
 <!-- ══ HOME ══ -->
 <div class="screen active" id="screen-home">
-  <div class="pad">
+  <!-- Community Banner -->
+  <div style="padding:16px 16px 0">
+    <div style="background:linear-gradient(135deg,#ecfdf5 0%,#d1fae5 50%,#fefce8 100%);border-radius:var(--radius);padding:16px;display:flex;align-items:center;gap:14px;margin-bottom:14px;border:1px solid rgba(5,150,105,.1)">
+      <div style="width:44px;height:44px;border-radius:12px;background:linear-gradient(135deg,#10b981,#059669);display:flex;align-items:center;justify-content:center;flex-shrink:0;box-shadow:var(--shadow-green)">
+        <i class="fa fa-fire" style="color:#fff;font-size:1rem"></i>
+      </div>
+      <div style="flex:1;min-width:0">
+        <div style="font-weight:800;font-size:.92rem;color:var(--text);letter-spacing:-.01em">Precios del barrio, al instante</div>
+        <div style="color:var(--text2);font-size:.8rem;margin-top:1px">Compartido por vecinos como vos</div>
+      </div>
+    </div>
+  </div>
+  <div class="pad" style="padding-top:0">
     <div class="pill-row" id="cat-pills" style="margin-bottom:16px"></div>
     <div class="label-row">
       <div class="label">Precios recientes</div>
-      <div class="label-link" onclick="goTab('ranking')">Ver todos →</div>
+      <div class="label-link" onclick="goTab('ranking')">Ver ranking <i class="fa fa-arrow-right" style="font-size:.7rem"></i></div>
     </div>
     <div id="home-feed">
       <div class="loader"><i class="fa fa-circle-notch fa-spin"></i></div>
@@ -331,12 +605,12 @@
 
   <!-- Controles normales del mapa -->
   <div class="map-overlay" id="map-controls">
-    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:6px">
-      <button onclick="goToMyLocation()" style="flex-shrink:0;background:#fff;color:var(--green);border:2px solid var(--green);border-radius:20px;padding:7px 14px;font-size:.82rem;font-weight:700;cursor:pointer;white-space:nowrap;box-shadow:0 2px 8px rgba(0,0,0,.1)">
-        📍 Mi ubicación
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px">
+      <button onclick="goToMyLocation()" style="flex-shrink:0;background:var(--surface);color:var(--green);border:1.5px solid var(--green);border-radius:24px;padding:9px 16px;font-size:.82rem;font-weight:700;cursor:pointer;white-space:nowrap;box-shadow:var(--shadow-sm);font-family:inherit;transition:all .2s var(--ease-out)">
+        <i class="fa fa-location-crosshairs" style="margin-right:5px"></i>Mi ubicacion
       </button>
-      <button onclick="openAddBiz()" style="flex-shrink:0;background:var(--green);color:#fff;border:none;border-radius:20px;padding:7px 14px;font-size:.82rem;font-weight:700;cursor:pointer;white-space:nowrap;box-shadow:0 2px 8px rgba(0,0,0,.2)">
-        🏪 Agregar negocio
+      <button onclick="openAddBiz()" style="flex-shrink:0;background:linear-gradient(135deg,#10b981,#059669);color:#fff;border:none;border-radius:24px;padding:9px 16px;font-size:.82rem;font-weight:700;cursor:pointer;white-space:nowrap;box-shadow:var(--shadow-green);font-family:inherit;transition:all .2s var(--ease-out)">
+        <i class="fa fa-plus" style="margin-right:5px"></i>Agregar negocio
       </button>
     </div>
     <div class="pill-row" id="map-pills"></div>
@@ -369,14 +643,21 @@
       <p style="color:var(--muted);font-size:.85rem;margin-bottom:8px">¿No encontrás el producto? Agregalo:</p>
       <input class="big-search" style="margin-left:0;width:100%" id="np-name" placeholder="Nombre"/>
       <select class="big-search" style="margin-left:0;width:100%" id="np-cat">
-        <option value="">Categoría...</option>
-        <option>Almacén</option><option>Lácteos</option><option>Bebidas</option>
-        <option>Panadería</option><option>Limpieza</option><option>Higiene</option>
-        <option>Verdulería</option><option>Carnicería</option><option>General</option>
+        <option value="">Categoria...</option>
+        <option>Almacen</option><option>Lacteos</option><option>Bebidas</option>
+        <option>Panaderia</option><option>Frutas y Verduras</option><option>Carnes</option>
+        <option>Fiambres y Quesos</option><option>Congelados</option>
+        <option>Limpieza</option><option>Higiene Personal</option><option>Perfumeria</option>
+        <option>Bebe y Ninos</option><option>Mascotas</option>
+        <option>Remedios</option><option>Ferreteria</option>
+        <option>Libreria</option><option>Electronica</option><option>General</option>
       </select>
       <select class="big-search" style="margin-left:0;width:100%;margin-bottom:12px" id="np-unit">
         <option value="unidad">Unidad</option><option value="kg">Kg</option>
-        <option value="lt">Litro</option><option value="500ml">500ml</option><option value="pack">Pack</option>
+        <option value="100g">100g</option><option value="lt">Litro</option>
+        <option value="500ml">500ml</option><option value="250ml">250ml</option>
+        <option value="pack">Pack</option><option value="docena">Docena</option>
+        <option value="metro">Metro</option><option value="rollo">Rollo</option>
       </select>
       <button class="btn-next" style="margin:0 0 16px" onclick="createAndSelectProd()">Agregar producto</button>
     </div>
@@ -401,8 +682,12 @@
       </div>
       <input class="big-search" style="margin-left:0;width:100%" id="nb-name" placeholder="Nombre del negocio"/>
       <select class="big-search" style="margin-left:0;width:100%;margin-bottom:12px" id="nb-cat">
-        <option>Almacén</option><option>Supermercado</option><option>Kiosco</option>
-        <option>Verdulería</option><option>Minimarket</option><option>Farmacia</option>
+        <option>Almacen</option><option>Supermercado</option><option>Minimarket</option>
+        <option>Autoservicio</option><option>Verduleria</option><option>Carniceria</option>
+        <option>Panaderia</option><option>Kiosco</option><option>Farmacia</option>
+        <option>Dietetica</option><option>Ferreteria</option><option>Bazar</option>
+        <option>Libreria</option><option>Perfumeria</option><option>Veterinaria</option>
+        <option>Comercio General</option>
       </select>
       <button class="btn-next" style="margin:0 0 8px;background:#f39c12" onclick="startWizardBizPlacement()">
         📍 Marcar en el mapa y agregar
@@ -447,8 +732,13 @@
           <div style="color:var(--muted);font-size:.82rem" id="res-badge"></div>
         </div>
       </div>
-      <button class="btn-next" onclick="resetReport()">Reportar otro precio</button>
-      <button class="btn-back" onclick="goTab('home')">← Ir al inicio</button>
+      <div style="display:flex;gap:8px;margin-bottom:8px">
+        <button class="btn-next" style="flex:1;margin:0" onclick="resetReport()">Reportar otro precio</button>
+        <button onclick="shareLastReport()" style="width:52px;border-radius:var(--radius-sm);border:1.5px solid var(--border);background:var(--surface);color:var(--green);cursor:pointer;font-size:1.1rem;display:flex;align-items:center;justify-content:center;transition:all .2s var(--ease-out)">
+          <i class="fa fa-share-nodes"></i>
+        </button>
+      </div>
+      <button class="btn-back" onclick="goTab('home')">Ir al inicio</button>
     </div>
   </div>
 </div>
@@ -457,9 +747,9 @@
 <div class="screen" id="screen-ranking">
   <div class="pad">
     <!-- Sub-tabs -->
-    <div style="display:flex;background:#f0f0f0;border-radius:12px;padding:4px;margin-bottom:14px;gap:4px">
-      <button id="rtab-precios" onclick="switchRankTab('precios')" style="flex:1;padding:9px;border-radius:9px;border:none;background:var(--green);color:#fff;font-weight:700;font-size:.88rem;cursor:pointer">💰 Precios</button>
-      <button id="rtab-comunidad" onclick="switchRankTab('comunidad')" style="flex:1;padding:9px;border-radius:9px;border:none;background:none;color:var(--muted);font-weight:700;font-size:.88rem;cursor:pointer">👥 Comunidad</button>
+    <div style="display:flex;background:var(--gray2);border-radius:var(--radius-sm);padding:4px;margin-bottom:14px;gap:4px">
+      <button id="rtab-precios" onclick="switchRankTab('precios')" style="flex:1;padding:10px;border-radius:var(--radius-xs);border:none;background:var(--green);color:#fff;font-weight:700;font-size:.88rem;cursor:pointer;font-family:inherit;transition:all .25s var(--ease-out);box-shadow:var(--shadow-sm)"><i class="fa fa-tag" style="margin-right:5px"></i>Precios</button>
+      <button id="rtab-comunidad" onclick="switchRankTab('comunidad')" style="flex:1;padding:10px;border-radius:var(--radius-xs);border:none;background:none;color:var(--muted);font-weight:700;font-size:.88rem;cursor:pointer;font-family:inherit;transition:all .25s var(--ease-out)"><i class="fa fa-users" style="margin-right:5px"></i>Comunidad</button>
     </div>
 
     <!-- Panel precios -->
@@ -486,11 +776,13 @@
 <div class="screen" id="screen-perfil">
   <div id="pf-out">
     <div class="empty">
-      <div class="empty-icon">👤</div>
-      <h3>Todavía no iniciaste sesión</h3>
-      <p>Creá tu cuenta gratis para reportar precios y ganar puntos</p>
-      <button class="btn-next" style="width:auto;padding:14px 28px;margin:20px auto 0" onclick="openAuth('reg')">Crear cuenta gratis</button>
-      <button class="btn-back" style="margin-top:8px" onclick="openAuth('login')">Ya tengo cuenta → Ingresar</button>
+      <div style="display:inline-flex;align-items:center;justify-content:center;width:72px;height:72px;border-radius:50%;background:var(--green-light);margin-bottom:16px">
+        <i class="fa fa-circle-user" style="font-size:2.5rem;color:var(--green)"></i>
+      </div>
+      <h3>Unite a la comunidad</h3>
+      <p>Creá tu cuenta gratis, reportá precios y ganá puntos junto a tus vecinos</p>
+      <button class="btn-next" style="width:auto;padding:14px 32px;margin:20px auto 0" onclick="openAuth('reg')">Crear cuenta gratis</button>
+      <button class="btn-back" style="margin-top:8px" onclick="openAuth('login')">Ya tengo cuenta</button>
     </div>
   </div>
   <div id="pf-in" style="display:none">
@@ -541,9 +833,9 @@
 <nav class="bottom-nav">
   <button class="nav-item active" id="nav-home" onclick="goTab('home')"><i class="fa fa-house"></i><span>Inicio</span></button>
   <button class="nav-item" id="nav-mapa" onclick="goTab('mapa')"><i class="fa fa-map-location-dot"></i><span>Mapa</span></button>
-  <button class="nav-item" id="nav-report" onclick="goTab('report')"><div class="nav-fab"><i class="fa fa-plus"></i></div><span style="margin-top:6px;font-size:.65rem;color:var(--green);font-weight:700">Cargar</span></button>
+  <button class="nav-item" id="nav-report" onclick="goTab('report')"><div class="nav-fab"><i class="fa fa-plus"></i></div><span style="margin-top:4px;font-size:.64rem;color:var(--green);font-weight:700">Cargar</span></button>
   <button class="nav-item" id="nav-ranking" onclick="goTab('ranking')"><i class="fa fa-trophy"></i><span>Ranking</span></button>
-  <button class="nav-item" id="nav-perfil" onclick="goTab('perfil')"><i class="fa fa-user-circle"></i><span>Yo</span></button>
+  <button class="nav-item" id="nav-perfil" onclick="goTab('perfil')"><i class="fa fa-circle-user"></i><span>Perfil</span></button>
   <button class="nav-item" id="nav-admin" onclick="goTab('admin')" style="display:none"><i class="fa fa-shield-halved"></i><span>Admin</span></button>
 </nav>
 
@@ -563,7 +855,8 @@
 <div class="sheet-bg" id="auth-bg" onclick="closeAuth(event)">
   <div class="sheet-box" onclick="event.stopPropagation()">
     <div class="sheet-handle"></div>
-    <div style="font-size:1.3rem;font-weight:800;margin-bottom:16px">🏷️ Comprecio</div>
+    <div style="font-size:1.3rem;font-weight:900;margin-bottom:4px;letter-spacing:-.02em">Compre<span style="color:var(--green)">cio</span></div>
+    <p style="color:var(--muted);font-size:.85rem;margin-bottom:16px;font-weight:500">Unite a la comunidad de precios del barrio</p>
     <div class="auth-tabs">
       <button class="auth-tab active" id="atab-login" onclick="switchAuth('login')">Ingresar</button>
       <button class="auth-tab" id="atab-reg" onclick="switchAuth('reg')">Crear cuenta</button>
@@ -608,16 +901,39 @@
 
     <select class="form-sel" id="ab-cat">
       <option value="">Tipo de negocio...</option>
-      <option>Almacén</option>
-      <option>Supermercado</option>
-      <option>Kiosco</option>
-      <option>Verdulería</option>
-      <option>Carnicería</option>
-      <option>Panadería</option>
-      <option>Minimarket</option>
-      <option>Farmacia</option>
-      <option>Ferretería</option>
-      <option>Comercio General</option>
+      <optgroup label="Alimentacion">
+        <option>Almacen</option>
+        <option>Supermercado</option>
+        <option>Minimarket</option>
+        <option>Autoservicio</option>
+        <option>Verduleria</option>
+        <option>Carniceria</option>
+        <option>Panaderia</option>
+        <option>Pescaderia</option>
+        <option>Dietetica</option>
+        <option>Fiambreria</option>
+        <option>Kiosco</option>
+      </optgroup>
+      <optgroup label="Salud y Belleza">
+        <option>Farmacia</option>
+        <option>Perfumeria</option>
+        <option>Optica</option>
+        <option>Veterinaria</option>
+      </optgroup>
+      <optgroup label="Hogar y Construccion">
+        <option>Ferreteria</option>
+        <option>Pintureria</option>
+        <option>Bazar</option>
+        <option>Muebleria</option>
+        <option>Vivero</option>
+      </optgroup>
+      <optgroup label="Servicios y Otros">
+        <option>Libreria</option>
+        <option>Electronica</option>
+        <option>Indumentaria</option>
+        <option>Mercado mayorista</option>
+        <option>Comercio General</option>
+      </optgroup>
     </select>
 
     <input class="form-inp" id="ab-address" placeholder="Dirección (opcional, ej: Av. Corrientes 1234)" />
@@ -637,22 +953,24 @@
 
 <!-- ══ ADMIN PANEL ══ -->
 <div class="screen" id="screen-admin">
-  <div style="background:#1a1a2e;padding:20px 16px 14px;color:#fff">
-    <div style="display:flex;align-items:center;gap:10px;margin-bottom:4px">
-      <span style="font-size:1.5rem">👑</span>
+  <div style="background:linear-gradient(135deg,#0f172a,#1e293b);padding:22px 16px 16px;color:#fff">
+    <div style="display:flex;align-items:center;gap:12px;margin-bottom:4px">
+      <div style="width:40px;height:40px;border-radius:12px;background:rgba(255,255,255,.1);display:flex;align-items:center;justify-content:center">
+        <i class="fa fa-shield-halved" style="font-size:1.1rem;color:#94a3b8"></i>
+      </div>
       <div>
-        <div style="font-weight:900;font-size:1.2rem">Panel Admin</div>
-        <div style="font-size:.78rem;opacity:.7">Comprecio Control Center</div>
+        <div style="font-weight:900;font-size:1.15rem;letter-spacing:-.01em">Panel Admin</div>
+        <div style="font-size:.78rem;color:#94a3b8;font-weight:500">Comprecio Control Center</div>
       </div>
     </div>
   </div>
 
   <!-- Sub-tabs admin -->
-  <div style="display:flex;background:#f0f0f0;padding:6px;gap:4px;overflow-x:auto">
-    <button onclick="adminTab('stats')"    id="atab-stats"    style="flex-shrink:0;padding:8px 14px;border-radius:8px;border:none;background:#1a1a2e;color:#fff;font-weight:700;font-size:.8rem;cursor:pointer">📊 Stats</button>
-    <button onclick="adminTab('users')"    id="atab-users"    style="flex-shrink:0;padding:8px 14px;border-radius:8px;border:none;background:none;color:#888;font-weight:700;font-size:.8rem;cursor:pointer">👥 Usuarios</button>
-    <button onclick="adminTab('activity')" id="atab-activity" style="flex-shrink:0;padding:8px 14px;border-radius:8px;border:none;background:none;color:#888;font-weight:700;font-size:.8rem;cursor:pointer">⚡ Actividad</button>
-    <button onclick="adminTab('bizz')"     id="atab-bizz"     style="flex-shrink:0;padding:8px 14px;border-radius:8px;border:none;background:none;color:#888;font-weight:700;font-size:.8rem;cursor:pointer">🏪 Negocios</button>
+  <div style="display:flex;background:var(--gray2);padding:6px;gap:4px;overflow-x:auto">
+    <button onclick="adminTab('stats')"    id="atab-stats"    style="flex-shrink:0;padding:9px 14px;border-radius:var(--radius-xs);border:none;background:#0f172a;color:#fff;font-weight:700;font-size:.8rem;cursor:pointer;font-family:inherit;transition:all .2s var(--ease-out)"><i class="fa fa-chart-bar" style="margin-right:4px"></i>Stats</button>
+    <button onclick="adminTab('users')"    id="atab-users"    style="flex-shrink:0;padding:9px 14px;border-radius:var(--radius-xs);border:none;background:none;color:var(--muted);font-weight:700;font-size:.8rem;cursor:pointer;font-family:inherit;transition:all .2s var(--ease-out)"><i class="fa fa-users" style="margin-right:4px"></i>Usuarios</button>
+    <button onclick="adminTab('activity')" id="atab-activity" style="flex-shrink:0;padding:9px 14px;border-radius:var(--radius-xs);border:none;background:none;color:var(--muted);font-weight:700;font-size:.8rem;cursor:pointer;font-family:inherit;transition:all .2s var(--ease-out)"><i class="fa fa-bolt" style="margin-right:4px"></i>Actividad</button>
+    <button onclick="adminTab('bizz')"     id="atab-bizz"     style="flex-shrink:0;padding:9px 14px;border-radius:var(--radius-xs);border:none;background:none;color:var(--muted);font-weight:700;font-size:.8rem;cursor:pointer;font-family:inherit;transition:all .2s var(--ease-out)"><i class="fa fa-store" style="margin-right:4px"></i>Negocios</button>
   </div>
 
   <!-- Panel stats -->

@@ -38,13 +38,48 @@ function closeOnboarding() {
 }
 
 // ── GEO ─────────────────────────────────────────
+let userLocationMarker = null;
+let hasUserLocation = false;
+
 function tryGeo() {
   if (!navigator.geolocation) return;
   navigator.geolocation.getCurrentPosition(pos => {
     userLat = pos.coords.latitude;
     userLng = pos.coords.longitude;
-    if (mapReady && map) map.setView([userLat, userLng], 15);
+    hasUserLocation = true;
+    if (mapReady && map) {
+      map.setView([userLat, userLng], 15);
+      showUserLocationMarker();
+    }
   });
+}
+
+function showUserLocationMarker() {
+  if (!map || !hasUserLocation) return;
+  if (userLocationMarker) map.removeLayer(userLocationMarker);
+  const pulseIcon = L.divIcon({
+    className: '',
+    html: `<div style="position:relative;width:20px;height:20px">
+      <div style="position:absolute;inset:-6px;border-radius:50%;background:rgba(16,185,129,.2);animation:pulseGlow 2s infinite"></div>
+      <div style="width:20px;height:20px;border-radius:50%;background:#10b981;border:3px solid #fff;box-shadow:0 2px 8px rgba(0,0,0,.2)"></div>
+    </div>`,
+    iconSize: [20, 20], iconAnchor: [10, 10],
+  });
+  userLocationMarker = L.marker([userLat, userLng], { icon: pulseIcon, interactive: false }).addTo(map);
+}
+
+// Haversine distance in km
+function distKm(lat1, lng1, lat2, lng2) {
+  const R = 6371;
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLng = (lng2 - lng1) * Math.PI / 180;
+  const a = Math.sin(dLat/2)**2 + Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLng/2)**2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+}
+
+function fmtDist(km) {
+  if (km < 1) return `${Math.round(km * 1000)}m`;
+  return `${km.toFixed(1)}km`;
 }
 
 // ── API HELPER ──────────────────────────────────
@@ -167,8 +202,8 @@ function renderCard(p) {
       <div class="card-top">
         <div>
           <div class="card-product">${p.product_name} <span class="card-unit">${p.unit}</span></div>
-          <div class="card-store"><i class="fa fa-store" style="font-size:.75rem;margin-right:4px"></i>${p.business_name}${p.verified ? ' <span style="color:var(--green);font-size:.7rem">✅</span>' : ''}</div>
-          ${p.address ? `<div class="card-store" style="font-size:.78rem;color:#999"><i class="fa fa-map-pin" style="font-size:.75rem;margin-right:3px"></i>${p.address}</div>` : ''}
+          <div class="card-store"><i class="fa fa-store" style="font-size:.72rem;margin-right:4px;color:var(--muted)"></i>${p.business_name}${p.verified ? ' <span style="color:var(--green);font-size:.7rem"><i class="fa fa-circle-check"></i></span>' : ''}${p._dist && p._dist < 100 ? ` <span style="color:var(--muted);font-size:.75rem;font-weight:600;margin-left:4px"><i class="fa fa-location-dot" style="font-size:.65rem"></i> ${fmtDist(p._dist)}</span>` : ''}</div>
+          ${p.address ? `<div class="card-store" style="font-size:.78rem;color:var(--muted)"><i class="fa fa-map-pin" style="font-size:.72rem;margin-right:3px"></i>${p.address}</div>` : ''}
         </div>
         <div style="text-align:right">
           <div class="card-price ${p.is_promotion ? 'promo' : ''}">$${fmt(p.price)}</div>
@@ -180,10 +215,13 @@ function renderCard(p) {
       </div>
       <div class="react-row" onclick="event.stopPropagation()">
         <button class="react-btn ${myR === 'confirmed' ? 'ok' : ''}" onclick="react(${p.id},'confirmed',this)">
-          ✅ Sí, es correcto
+          <i class="fa fa-check" style="margin-right:3px"></i> Confirmar
         </button>
         <button class="react-btn ${myR === 'disputed' ? 'bad' : ''}" onclick="react(${p.id},'disputed',this)">
-          ❌ El precio cambió
+          <i class="fa fa-xmark" style="margin-right:3px"></i> Cambio
+        </button>
+        <button class="react-btn" onclick="sharePrice('${esc(p.product_name)}',${p.price},'${p.unit}','${esc(p.business_name)}',${p.id})" style="flex:0;padding:8px 14px">
+          <i class="fa fa-share-nodes"></i>
         </button>
       </div>
     </div>`;
@@ -213,6 +251,26 @@ function fmt(n) {
 }
 
 function esc(s) { return (s || '').replace(/'/g, "\\'"); }
+
+// ── SHARE ────────────────────────────────────────
+function shareLastReport() {
+  const price = document.getElementById('res-price').textContent;
+  const label = document.getElementById('res-label').textContent;
+  sharePrice(label, 0, '', '', 0);
+}
+
+function sharePrice(productName, price, unit, bizName, priceId) {
+  const text = price > 0
+    ? `${productName} a $${fmt(price)} (${unit}) en ${bizName}\n\nVisto en Comprecio - la red de precios del barrio`
+    : `${productName}\n\nCompartido desde Comprecio - la red de precios del barrio`;
+  if (navigator.share) {
+    navigator.share({ title: `${productName} - $${fmt(price)}`, text }).catch(() => {});
+  } else {
+    // Fallback to WhatsApp
+    const url = `https://wa.me/?text=${encodeURIComponent(text)}`;
+    window.open(url, '_blank');
+  }
+}
 
 // ── REACTIONS ────────────────────────────────────
 async function react(priceId, type, btn) {
@@ -352,13 +410,15 @@ function closeDetailAndReport(prodId, prodName, bizId, bizName) {
 
 // ── MAP ──────────────────────────────────────────
 function initMap() {
-  if (mapReady) { loadMapData(); return; }
+  if (mapReady) { loadMapData(); showUserLocationMarker(); return; }
   mapReady = true;
-  map = L.map('map').setView([userLat, userLng], 14);
+  map = L.map('map', { zoomControl: false }).setView([userLat, userLng], hasUserLocation ? 15 : 14);
+  L.control.zoom({ position: 'topright' }).addTo(map);
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-    attribution: '© OpenStreetMap'
+    attribution: '&copy; OpenStreetMap'
   }).addTo(map);
   map.on('moveend', loadMapData);
+  showUserLocationMarker();
   loadMapData();
 
   // Load product filter pills for map
@@ -383,17 +443,17 @@ async function loadMapData(cat, el) {
     bizMarkers = [];
 
     businesses.forEach(b => {
-      const color = b.verified ? '#1a7a4a' : '#aaa';
+      const color = b.verified ? '#059669' : '#94a3b8';
       const m = L.circleMarker([b.lat, b.lng], {
         radius: b.price_count > 0 ? 11 : 7, color,
-        fillColor: b.verified ? '#2ea865' : '#ccc', fillOpacity: .85, weight: 2
+        fillColor: b.verified ? '#10b981' : '#cbd5e1', fillOpacity: .85, weight: 2
       }).addTo(map);
       m.bindPopup(`
         <div style="min-width:180px">
           <div style="font-weight:700;font-size:.95rem;margin-bottom:2px">${b.name}${b.verified ? ' ✅' : ''}</div>
           <div style="color:#888;font-size:.8rem;margin-bottom:6px">${b.category}${b.address ? ' · ' + b.address : ''}</div>
           <div style="color:#555;font-size:.8rem;margin-bottom:8px">📦 ${b.price_count || 0} precio(s) cargado(s)</div>
-          <button onclick="openBizDetail(${b.id})" style="width:100%;background:#1a7a4a;color:#fff;border:none;border-radius:8px;padding:7px;font-size:.82rem;cursor:pointer;margin-bottom:6px;font-weight:700">Ver precios</button>
+          <button onclick="openBizDetail(${b.id})" style="width:100%;background:#059669;color:#fff;border:none;border-radius:8px;padding:7px;font-size:.82rem;cursor:pointer;margin-bottom:6px;font-weight:700">Ver precios</button>
           <div style="display:flex;gap:5px">
             <a href="https://www.google.com/maps/dir/?api=1&destination=${b.lat},${b.lng}" target="_blank"
                style="flex:1;display:block;text-align:center;padding:6px;border-radius:8px;border:1px solid #4285F4;color:#4285F4;font-size:.75rem;font-weight:700;text-decoration:none">
@@ -408,12 +468,22 @@ async function loadMapData(cat, el) {
       bizMarkers.push(m);
     });
 
-    // Also populate map list
+    // Also populate map list — sorted by distance if location available
     const list = document.getElementById('map-list');
     const prices = await api('GET', '/prices');
     let filtered = prices;
     if (mapCatFilter) filtered = prices.filter(p => p.category === mapCatFilter);
-    if (!filtered.length) { list.innerHTML = `<div class="empty"><div class="empty-icon">📍</div><h3>Sin precios en esta zona</h3><p>¡Reportá el primero!</p></div>`; return; }
+    if (!filtered.length) {
+      list.innerHTML = `<div class="empty"><div class="empty-icon"><i class="fa fa-map-pin" style="color:var(--green)"></i></div><h3>Sin precios en esta zona</h3><p>Se el primero en reportar un precio</p></div>`;
+      return;
+    }
+    // Add distance to each price if we have user location
+    if (hasUserLocation) {
+      filtered = filtered.map(p => ({
+        ...p,
+        _dist: p.lat && p.lng ? distKm(userLat, userLng, p.lat, p.lng) : 999
+      })).sort((a, b) => a._dist - b._dist);
+    }
     list.innerHTML = filtered.slice(0, 20).map(p => renderCard(p)).join('');
   } catch {}
 }
@@ -944,12 +1014,12 @@ function switchRankTab(tab) {
   const btnPrecios = document.getElementById('rtab-precios');
   const btnComun = document.getElementById('rtab-comunidad');
   if (tab === 'precios') {
-    btnPrecios.style.background = 'var(--green)'; btnPrecios.style.color = '#fff';
-    btnComun.style.background = 'none'; btnComun.style.color = 'var(--muted)';
+    btnPrecios.style.background = 'var(--green)'; btnPrecios.style.color = '#fff'; btnPrecios.style.boxShadow = 'var(--shadow-sm)';
+    btnComun.style.background = 'none'; btnComun.style.color = 'var(--muted)'; btnComun.style.boxShadow = 'none';
     loadRanking();
   } else {
-    btnComun.style.background = 'var(--green)'; btnComun.style.color = '#fff';
-    btnPrecios.style.background = 'none'; btnPrecios.style.color = 'var(--muted)';
+    btnComun.style.background = 'var(--green)'; btnComun.style.color = '#fff'; btnComun.style.boxShadow = 'var(--shadow-sm)';
+    btnPrecios.style.background = 'none'; btnPrecios.style.color = 'var(--muted)'; btnPrecios.style.boxShadow = 'none';
     loadCommunityRanking();
   }
 }
@@ -1026,18 +1096,15 @@ async function verifyBiz(bizId, btn) {
 function goToMyLocation() {
   if (!mapReady) { initMap(); }
   if (!navigator.geolocation) { toast('Tu dispositivo no tiene GPS', 'err'); return; }
-  toast('Buscando tu ubicación...', 'info');
+  toast('Buscando tu ubicacion...', 'info');
   navigator.geolocation.getCurrentPosition(pos => {
     userLat = pos.coords.latitude;
     userLng = pos.coords.longitude;
+    hasUserLocation = true;
     map.setView([userLat, userLng], 16);
-    // marcador temporal de ubicación
-    L.circleMarker([userLat, userLng], { radius: 10, color: '#1a7a4a', fillColor: '#2ea865', fillOpacity: 0.8, weight: 3 })
-      .addTo(map)
-      .bindPopup('📍 Vos estás acá')
-      .openPopup();
-    toast('¡Ubicación encontrada!');
-  }, () => toast('No se pudo obtener tu ubicación', 'err'));
+    showUserLocationMarker();
+    toast('Ubicacion encontrada');
+  }, () => toast('No se pudo obtener tu ubicacion', 'err'));
 }
 
 // ── RANKING ZONA ────────────────────────────────
@@ -1152,7 +1219,7 @@ function adminTab(name) {
   ['stats', 'users', 'activity', 'bizz'].forEach(t => {
     document.getElementById('apanel-' + t).style.display = t === name ? 'block' : 'none';
     const btn = document.getElementById('atab-' + t);
-    btn.style.background = t === name ? '#1a1a2e' : 'none';
+    btn.style.background = t === name ? '#0f172a' : 'none';
     btn.style.color = t === name ? '#fff' : '#888';
   });
   if (name === 'stats')    loadAdminStats();
@@ -1177,7 +1244,7 @@ async function loadAdminStats() {
     ].map(([icon, label, val]) => `
       <div style="background:#fff;border-radius:14px;padding:16px;text-align:center;box-shadow:0 2px 8px rgba(0,0,0,.06)">
         <div style="font-size:1.6rem;margin-bottom:4px">${icon}</div>
-        <div style="font-size:1.5rem;font-weight:900;color:#1a1a2e">${val}</div>
+        <div style="font-size:1.5rem;font-weight:900;color:#0f172a">${val}</div>
         <div style="font-size:.72rem;color:#888;margin-top:2px">${label}</div>
       </div>`).join('');
   } catch (err) {
@@ -1217,7 +1284,7 @@ function renderAdminUsers(users) {
           <div style="font-weight:700;font-size:.95rem">${esc(u.name)} ${u.blocked ? '🔒' : ''}</div>
           <div style="color:#888;font-size:.78rem">${esc(u.email)}</div>
         </div>
-        <span style="background:${u.role==='admin'?'#1a1a2e':u.role==='merchant'?'#fff3cd':'#e8f5ee'};color:${u.role==='admin'?'#fff':u.role==='merchant'?'#856404':'#155724'};border-radius:10px;padding:3px 9px;font-size:.72rem;font-weight:700">${u.role}</span>
+        <span style="background:${u.role==='admin'?'#0f172a':u.role==='merchant'?'#fff3cd':'#e8f5ee'};color:${u.role==='admin'?'#fff':u.role==='merchant'?'#856404':'#155724'};border-radius:10px;padding:3px 9px;font-size:.72rem;font-weight:700">${u.role}</span>
       </div>
       <div style="display:flex;gap:8px;font-size:.75rem;color:#888;margin-bottom:10px">
         <span>⭐ ${u.points} pts</span>
@@ -1225,7 +1292,7 @@ function renderAdminUsers(users) {
         <span>👍 ${u.reactions_count || 0} reacciones</span>
       </div>
       <div style="display:flex;gap:6px">
-        <button onclick="openAdminEdit(${u.id})" style="flex:1;padding:7px;border-radius:8px;border:1.5px solid #1a1a2e;background:#fff;color:#1a1a2e;font-weight:700;font-size:.78rem;cursor:pointer">✏️ Editar</button>
+        <button onclick="openAdminEdit(${u.id})" style="flex:1;padding:7px;border-radius:8px;border:1.5px solid #0f172a;background:#fff;color:#0f172a;font-weight:700;font-size:.78rem;cursor:pointer">✏️ Editar</button>
         <button onclick="toggleBlockUser(${u.id},${u.blocked?0:1})" style="flex:1;padding:7px;border-radius:8px;border:1.5px solid ${u.blocked?'#28a745':'#e74c3c'};background:${u.blocked?'#d4edda':'#fdecea'};color:${u.blocked?'#155724':'#c0392b'};font-weight:700;font-size:.78rem;cursor:pointer">${u.blocked?'🔓 Desbloquear':'🔒 Bloquear'}</button>
         <button onclick="deleteAdminUser(${u.id},'${esc(u.name)}')" style="padding:7px 10px;border-radius:8px;border:1.5px solid #e74c3c;background:#fdecea;color:#c0392b;font-weight:700;font-size:.78rem;cursor:pointer">🗑️</button>
       </div>
@@ -1304,7 +1371,7 @@ async function loadAdminActivity() {
             <div style="color:#888;font-size:.75rem;margin-top:2px">por <b>${esc(p.user_name)}</b></div>
           </div>
           <div style="text-align:right">
-            <div style="font-size:1.1rem;font-weight:900;color:#1a7a4a">$${Number(p.price).toLocaleString('es-AR')}</div>
+            <div style="font-size:1.1rem;font-weight:900;color:#059669">$${Number(p.price).toLocaleString('es-AR')}</div>
             <div style="font-size:.68rem;color:#aaa">${new Date(p.created_at).toLocaleDateString('es-AR')}</div>
           </div>
         </div>
