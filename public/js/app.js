@@ -40,14 +40,50 @@ function closeOnboarding() {
 // ── GEO ─────────────────────────────────────────
 let userLocationMarker = null;
 let hasUserLocation = false;
+let geoRetryTimer = null;
+let geoPermissionState = null; // 'granted' | 'denied' | 'prompt' | null
 
 function tryGeo() {
   if (!navigator.geolocation) return;
+
+  // Intentar con Permissions API para saber el estado real
+  if (navigator.permissions && navigator.permissions.query) {
+    navigator.permissions.query({ name: 'geolocation' }).then(result => {
+      geoPermissionState = result.state;
+      // Escuchar cambios — cuando el usuario active el permiso manualmente
+      result.addEventListener('change', () => {
+        geoPermissionState = result.state;
+        if (result.state === 'granted') {
+          hideGeoBanner();
+          requestGeoPosition();
+        }
+      });
+
+      if (result.state === 'denied') {
+        hasUserLocation = false;
+        showGeoBanner();
+        startGeoRetry();
+      } else {
+        requestGeoPosition();
+      }
+    }).catch(() => {
+      // Permissions API no soportada, intentar directo
+      requestGeoPosition();
+    });
+  } else {
+    requestGeoPosition();
+  }
+}
+
+function requestGeoPosition() {
   navigator.geolocation.getCurrentPosition(
     pos => {
       userLat = pos.coords.latitude;
       userLng = pos.coords.longitude;
       hasUserLocation = true;
+      geoPermissionState = 'granted';
+      hideGeoBanner();
+      stopGeoRetry();
       if (mapReady && map) {
         map.setView([userLat, userLng], 15);
         showUserLocationMarker();
@@ -57,12 +93,103 @@ function tryGeo() {
       console.warn('Geolocalizacion no disponible:', err.code, err.message);
       hasUserLocation = false;
       if (err.code === 1) {
-        toast('Para ver negocios cerca tuyo, permite ubicacion en tu navegador (toca el candado 🔒).', 'info', 5000);
+        geoPermissionState = 'denied';
+        showGeoBanner();
+        startGeoRetry();
       }
-      // No bloquear nada — el usuario puede navegar el mapa manualmente
     },
     { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 }
   );
+}
+
+// Banner persistente para pedir permisos
+function showGeoBanner() {
+  if (document.getElementById('geo-banner')) return;
+  const banner = document.createElement('div');
+  banner.id = 'geo-banner';
+  banner.innerHTML = `
+    <div style="position:fixed;top:0;left:0;right:0;z-index:9999;
+      background:linear-gradient(135deg,#f59e0b,#d97706);color:#fff;
+      padding:12px 16px;display:flex;align-items:center;gap:10px;
+      font-size:14px;font-family:inherit;box-shadow:0 2px 12px rgba(0,0,0,.15);
+      animation:slideDown .3s var(--ease-out,ease)">
+      <span style="font-size:22px;flex-shrink:0">📍</span>
+      <div style="flex:1">
+        <strong>Comprecio necesita tu ubicacion</strong><br>
+        <span style="font-size:12px;opacity:.9">Para ver precios cerca tuyo. Toca el boton para activarla.</span>
+      </div>
+      <button onclick="retryGeoPermission()" style="
+        background:#fff;color:#d97706;border:none;border-radius:8px;
+        padding:8px 14px;font-weight:700;font-size:13px;cursor:pointer;
+        white-space:nowrap;flex-shrink:0">
+        Activar 📍
+      </button>
+      <button onclick="dismissGeoBanner()" style="
+        background:none;border:none;color:#fff;font-size:18px;
+        cursor:pointer;padding:4px;opacity:.7">✕</button>
+    </div>
+  `;
+  document.body.prepend(banner);
+}
+
+function hideGeoBanner() {
+  const b = document.getElementById('geo-banner');
+  if (b) b.remove();
+}
+
+function dismissGeoBanner() {
+  hideGeoBanner();
+  stopGeoRetry();
+  sessionStorage.setItem('geo_banner_dismissed', '1');
+}
+
+function retryGeoPermission() {
+  // Forzar que el navegador re-pida el permiso
+  toast('Buscando tu ubicacion...', 'info');
+  navigator.geolocation.getCurrentPosition(
+    pos => {
+      userLat = pos.coords.latitude;
+      userLng = pos.coords.longitude;
+      hasUserLocation = true;
+      geoPermissionState = 'granted';
+      hideGeoBanner();
+      stopGeoRetry();
+      toast('Ubicacion activada!', 'ok');
+      if (mapReady && map) {
+        map.setView([userLat, userLng], 15);
+        showUserLocationMarker();
+      }
+    },
+    err => {
+      if (err.code === 1) {
+        toast('Permiso denegado. En tu navegador: toca el candado 🔒 arriba y permite Ubicacion. Luego recarga.', 'err', 6000);
+      } else {
+        toast('No se pudo obtener GPS. Intenta de nuevo.', 'err');
+      }
+    },
+    { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
+  );
+}
+
+// Reintentar cada 30 seg (por si el usuario cambia el permiso en ajustes)
+function startGeoRetry() {
+  if (geoRetryTimer) return;
+  if (sessionStorage.getItem('geo_banner_dismissed')) return;
+  geoRetryTimer = setInterval(() => {
+    if (hasUserLocation) { stopGeoRetry(); return; }
+    // Checkear silenciosamente si el permiso cambió
+    if (navigator.permissions && navigator.permissions.query) {
+      navigator.permissions.query({ name: 'geolocation' }).then(result => {
+        if (result.state === 'granted') {
+          requestGeoPosition();
+        }
+      });
+    }
+  }, 30000);
+}
+
+function stopGeoRetry() {
+  if (geoRetryTimer) { clearInterval(geoRetryTimer); geoRetryTimer = null; }
 }
 
 function showUserLocationMarker() {
@@ -1138,7 +1265,8 @@ function goToMyLocation() {
     err => {
       console.warn('GPS error:', err.code, err.message);
       if (err.code === 1) {
-        toast('Permiso denegado. Toca el candado 🔒 en la barra del navegador y permite "Ubicacion".', 'err', 5000);
+        showGeoBanner();
+        toast('Permiso denegado. Toca "Activar 📍" arriba o permite ubicacion en ajustes del navegador.', 'err', 5000);
       } else if (err.code === 2) {
         toast('GPS no disponible. Navega el mapa manualmente.', 'err');
       } else {

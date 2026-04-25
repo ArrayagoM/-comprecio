@@ -361,6 +361,10 @@
       0%, 100% { box-shadow: 0 0 0 0 var(--green-glow); }
       50% { box-shadow: 0 0 0 8px transparent; }
     }
+    @keyframes slideDown {
+      from { transform: translateY(-100%); opacity: 0; }
+      to { transform: translateY(0); opacity: 1; }
+    }
     @keyframes floatUp {
       from { opacity: 0; transform: translateY(20px); }
       to { opacity: 1; transform: translateY(0); }
