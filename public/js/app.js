@@ -43,15 +43,23 @@ let hasUserLocation = false;
 
 function tryGeo() {
   if (!navigator.geolocation) return;
-  navigator.geolocation.getCurrentPosition(pos => {
-    userLat = pos.coords.latitude;
-    userLng = pos.coords.longitude;
-    hasUserLocation = true;
-    if (mapReady && map) {
-      map.setView([userLat, userLng], 15);
-      showUserLocationMarker();
-    }
-  });
+  navigator.geolocation.getCurrentPosition(
+    pos => {
+      userLat = pos.coords.latitude;
+      userLng = pos.coords.longitude;
+      hasUserLocation = true;
+      if (mapReady && map) {
+        map.setView([userLat, userLng], 15);
+        showUserLocationMarker();
+      }
+    },
+    err => {
+      console.warn('Geolocalizacion no disponible:', err.message);
+      hasUserLocation = false;
+      // No bloquear nada — el usuario puede navegar el mapa manualmente
+    },
+    { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 }
+  );
 }
 
 function showUserLocationMarker() {
@@ -88,7 +96,20 @@ async function api(method, path, body) {
   if (body) opts.body = JSON.stringify(body);
   const res = await fetch(API + path, opts);
   const data = await res.json();
-  if (!res.ok) throw new Error(data.error || 'Error');
+  if (!res.ok) {
+    // Si el token expiró o es inválido, forzar re-login
+    if (res.status === 401 && token) {
+      console.warn('Token expirado, forzando re-login');
+      token = null; currentUser = null;
+      localStorage.removeItem('cp_token');
+      localStorage.removeItem('cp_user');
+      updateChip();
+      toast('Tu sesion expiro, ingresa de nuevo', 'err');
+      openAuth('login');
+      throw new Error('Sesion expirada');
+    }
+    throw new Error(data.error || 'Error');
+  }
   return data;
 }
 
@@ -883,14 +904,15 @@ let placementLat = null, placementLng = null;
 function openAddBiz() {
   if (!token) { openAuth(); return; }
 
-  // Asegurar que el mapa esté listo
-  if (!mapReady) initMap();
-  goTab('mapa');
-
-  // Esperar un tick para que el mapa esté visible
-  setTimeout(() => {
-    enterPlacementMode();
-  }, 100);
+  // Verificar que el token sigue siendo valido antes de entrar al flujo
+  api('GET', '/auth/me').then(() => {
+    // Token valido, continuar
+    if (!mapReady) initMap();
+    goTab('mapa');
+    setTimeout(() => { enterPlacementMode(); }, 100);
+  }).catch(() => {
+    // Token invalido — api() ya fuerza re-login
+  });
 }
 
 function enterPlacementMode() {
@@ -899,9 +921,13 @@ function enterPlacementMode() {
   document.getElementById('placement-overlay').style.display = 'block';
   document.getElementById('map-list').style.display = 'none';
 
-  // Posición inicial del pin: ubicación del usuario o centro del mapa
-  const startLat = userLat || map.getCenter().lat;
-  const startLng = userLng || map.getCenter().lng;
+  // Posición inicial: ubicacion del usuario si disponible, o centro actual del mapa
+  const startLat = hasUserLocation ? userLat : map.getCenter().lat;
+  const startLng = hasUserLocation ? userLng : map.getCenter().lng;
+
+  if (!hasUserLocation) {
+    toast('Sin GPS. Navega el mapa y arrastra el pin.', 'info');
+  }
 
   // Crear icono personalizado con animación de hint
   const pinIcon = L.divIcon({
@@ -1097,14 +1123,27 @@ function goToMyLocation() {
   if (!mapReady) { initMap(); }
   if (!navigator.geolocation) { toast('Tu dispositivo no tiene GPS', 'err'); return; }
   toast('Buscando tu ubicacion...', 'info');
-  navigator.geolocation.getCurrentPosition(pos => {
-    userLat = pos.coords.latitude;
-    userLng = pos.coords.longitude;
-    hasUserLocation = true;
-    map.setView([userLat, userLng], 16);
-    showUserLocationMarker();
-    toast('Ubicacion encontrada');
-  }, () => toast('No se pudo obtener tu ubicacion', 'err'));
+  navigator.geolocation.getCurrentPosition(
+    pos => {
+      userLat = pos.coords.latitude;
+      userLng = pos.coords.longitude;
+      hasUserLocation = true;
+      map.setView([userLat, userLng], 16);
+      showUserLocationMarker();
+      toast('Ubicacion encontrada');
+    },
+    err => {
+      console.warn('GPS error:', err.code, err.message);
+      if (err.code === 1) {
+        toast('Permiso de ubicacion denegado. Activa GPS en ajustes.', 'err');
+      } else if (err.code === 2) {
+        toast('GPS no disponible. Navega el mapa manualmente.', 'err');
+      } else {
+        toast('GPS tardo demasiado. Navega el mapa manualmente.', 'err');
+      }
+    },
+    { enableHighAccuracy: true, timeout: 15000, maximumAge: 30000 }
+  );
 }
 
 // ── RANKING ZONA ────────────────────────────────
@@ -1235,20 +1274,21 @@ async function loadAdminStats() {
   try {
     const s = await api('GET', '/admin/stats');
     grid.innerHTML = [
-      ['👥', 'Usuarios',       s.users],
-      ['🏪', 'Negocios',       s.businesses],
-      ['📦', 'Productos',      s.products],
-      ['💰', 'Precios totales', s.prices],
-      ['⚡', 'Precios hoy',    s.prices_hoy],
-      ['👍', 'Reacciones',     s.reacciones],
+      ['<i class="fa fa-users" style="color:var(--green)"></i>', 'Usuarios',       s.users],
+      ['<i class="fa fa-store" style="color:var(--green)"></i>', 'Negocios',       s.businesses],
+      ['<i class="fa fa-box" style="color:var(--green)"></i>', 'Productos',      s.products],
+      ['<i class="fa fa-tag" style="color:var(--green)"></i>', 'Precios totales', s.prices],
+      ['<i class="fa fa-bolt" style="color:var(--yellow)"></i>', 'Precios hoy',    s.prices_hoy],
+      ['<i class="fa fa-thumbs-up" style="color:var(--green)"></i>', 'Reacciones',     s.reacciones],
     ].map(([icon, label, val]) => `
-      <div style="background:#fff;border-radius:14px;padding:16px;text-align:center;box-shadow:0 2px 8px rgba(0,0,0,.06)">
-        <div style="font-size:1.6rem;margin-bottom:4px">${icon}</div>
-        <div style="font-size:1.5rem;font-weight:900;color:#0f172a">${val}</div>
-        <div style="font-size:.72rem;color:#888;margin-top:2px">${label}</div>
+      <div style="background:var(--surface);border-radius:var(--radius-sm);padding:16px;text-align:center;box-shadow:var(--shadow-sm);border:1px solid var(--border-light)">
+        <div style="font-size:1.4rem;margin-bottom:6px">${icon}</div>
+        <div style="font-size:1.5rem;font-weight:900;color:var(--text)">${val}</div>
+        <div style="font-size:.72rem;color:var(--muted);margin-top:2px;font-weight:500">${label}</div>
       </div>`).join('');
   } catch (err) {
-    grid.innerHTML = `<div class="empty"><p>Error: ${err.message}</p></div>`;
+    if (err.message === 'Sesion expirada') return; // ya se redirigió al login
+    grid.innerHTML = `<div class="empty"><p style="color:var(--red)">Error: ${err.message}</p></div>`;
   }
 }
 
@@ -1260,6 +1300,7 @@ async function loadAdminUsers() {
     adminUsersCache = await api('GET', '/admin/users');
     renderAdminUsers(adminUsersCache);
   } catch (err) {
+    if (err.message === 'Sesion expirada') return;
     list.innerHTML = `<div class="empty"><p>Error: ${err.message}</p></div>`;
   }
 }
@@ -1361,7 +1402,7 @@ async function loadAdminActivity() {
   list.innerHTML = '<div class="loader"><i class="fa fa-circle-notch fa-spin"></i></div>';
   try {
     const items = await api('GET', '/admin/activity');
-    if (!items.length) { list.innerHTML = '<div class="empty"><p>Sin actividad</p></div>'; return; }
+    if (!items.length) { list.innerHTML = '<div class="empty"><p style="color:var(--muted)">Sin actividad</p></div>'; return; }
     list.innerHTML = items.map(p => `
       <div style="background:#fff;border-radius:12px;padding:12px 14px;margin-bottom:8px;box-shadow:0 2px 6px rgba(0,0,0,.05);border-left:4px solid ${p.is_promotion?'#f39c12':'#1a7a4a'}">
         <div style="display:flex;justify-content:space-between;align-items:flex-start">
@@ -1380,6 +1421,7 @@ async function loadAdminActivity() {
         </div>
       </div>`).join('');
   } catch (err) {
+    if (err.message === 'Sesion expirada') return;
     list.innerHTML = `<div class="empty"><p>Error: ${err.message}</p></div>`;
   }
 }
@@ -1418,6 +1460,7 @@ async function loadAdminBizz() {
         </div>
       </div>`).join('');
   } catch (err) {
+    if (err.message === 'Sesion expirada') return;
     list.innerHTML = `<div class="empty"><p>Error: ${err.message}</p></div>`;
   }
 }
