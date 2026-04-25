@@ -54,8 +54,11 @@ function tryGeo() {
       }
     },
     err => {
-      console.warn('Geolocalizacion no disponible:', err.message);
+      console.warn('Geolocalizacion no disponible:', err.code, err.message);
       hasUserLocation = false;
+      if (err.code === 1) {
+        toast('Para ver negocios cerca tuyo, permite ubicacion en tu navegador (toca el candado 🔒).', 'info', 5000);
+      }
       // No bloquear nada — el usuario puede navegar el mapa manualmente
     },
     { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 }
@@ -115,12 +118,12 @@ async function api(method, path, body) {
 
 // ── TOAST ────────────────────────────────────────
 let toastTimer;
-function toast(msg, type = 'ok') {
+function toast(msg, type = 'ok', duration = 3000) {
   const el = document.getElementById('my-toast');
   el.textContent = (type === 'ok' ? '✅ ' : type === 'err' ? '❌ ' : 'ℹ️ ') + msg;
   el.classList.add('show');
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => el.classList.remove('show'), 3000);
+  toastTimer = setTimeout(() => el.classList.remove('show'), duration);
 }
 
 // ── TABS ─────────────────────────────────────────
@@ -1135,11 +1138,11 @@ function goToMyLocation() {
     err => {
       console.warn('GPS error:', err.code, err.message);
       if (err.code === 1) {
-        toast('Permiso de ubicacion denegado. Activa GPS en ajustes.', 'err');
+        toast('Permiso denegado. Toca el candado 🔒 en la barra del navegador y permite "Ubicacion".', 'err', 5000);
       } else if (err.code === 2) {
         toast('GPS no disponible. Navega el mapa manualmente.', 'err');
       } else {
-        toast('GPS tardo demasiado. Navega el mapa manualmente.', 'err');
+        toast('GPS tardo demasiado. Intenta de nuevo.', 'err');
       }
     },
     { enableHighAccuracy: true, timeout: 15000, maximumAge: 30000 }
