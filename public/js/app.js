@@ -40,156 +40,46 @@ function closeOnboarding() {
 // ── GEO ─────────────────────────────────────────
 let userLocationMarker = null;
 let hasUserLocation = false;
-let geoRetryTimer = null;
-let geoPermissionState = null; // 'granted' | 'denied' | 'prompt' | null
 
 function tryGeo() {
-  if (!navigator.geolocation) return;
+  if (!navigator.geolocation) { geoFallbackIP(); return; }
+  navigator.geolocation.getCurrentPosition(
+    pos => { applyGeo(pos.coords.latitude, pos.coords.longitude); },
+    () => { geoFallbackIP(); },
+    { enableHighAccuracy: true, timeout: 8000, maximumAge: 60000 }
+  );
+}
 
-  // Intentar con Permissions API para saber el estado real
-  if (navigator.permissions && navigator.permissions.query) {
-    navigator.permissions.query({ name: 'geolocation' }).then(result => {
-      geoPermissionState = result.state;
-      // Escuchar cambios — cuando el usuario active el permiso manualmente
-      result.addEventListener('change', () => {
-        geoPermissionState = result.state;
-        if (result.state === 'granted') {
-          hideGeoBanner();
-          requestGeoPosition();
-        }
-      });
-
-      if (result.state === 'denied') {
-        hasUserLocation = false;
-        showGeoBanner();
-        startGeoRetry();
-      } else {
-        requestGeoPosition();
+// Fallback: obtener ubicacion aproximada por IP (sin permisos)
+function geoFallbackIP() {
+  fetch('https://ipapi.co/json/')
+    .then(r => r.json())
+    .then(data => {
+      if (data.latitude && data.longitude) {
+        applyGeo(data.latitude, data.longitude);
       }
-    }).catch(() => {
-      // Permissions API no soportada, intentar directo
-      requestGeoPosition();
+    })
+    .catch(() => {
+      // Segundo fallback
+      fetch('https://ip-api.com/json/?fields=lat,lon')
+        .then(r => r.json())
+        .then(data => {
+          if (data.lat && data.lon) {
+            applyGeo(data.lat, data.lon);
+          }
+        })
+        .catch(() => { /* sin ubicacion, se usa la default Buenos Aires */ });
     });
-  } else {
-    requestGeoPosition();
+}
+
+function applyGeo(lat, lng) {
+  userLat = lat;
+  userLng = lng;
+  hasUserLocation = true;
+  if (mapReady && map) {
+    map.setView([userLat, userLng], 15);
+    showUserLocationMarker();
   }
-}
-
-function requestGeoPosition() {
-  navigator.geolocation.getCurrentPosition(
-    pos => {
-      userLat = pos.coords.latitude;
-      userLng = pos.coords.longitude;
-      hasUserLocation = true;
-      geoPermissionState = 'granted';
-      hideGeoBanner();
-      stopGeoRetry();
-      if (mapReady && map) {
-        map.setView([userLat, userLng], 15);
-        showUserLocationMarker();
-      }
-    },
-    err => {
-      console.warn('Geolocalizacion no disponible:', err.code, err.message);
-      hasUserLocation = false;
-      if (err.code === 1) {
-        geoPermissionState = 'denied';
-        showGeoBanner();
-        startGeoRetry();
-      }
-    },
-    { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 }
-  );
-}
-
-// Banner persistente para pedir permisos
-function showGeoBanner() {
-  if (document.getElementById('geo-banner')) return;
-  const banner = document.createElement('div');
-  banner.id = 'geo-banner';
-  banner.innerHTML = `
-    <div style="position:fixed;top:0;left:0;right:0;z-index:9999;
-      background:linear-gradient(135deg,#f59e0b,#d97706);color:#fff;
-      padding:12px 16px;display:flex;align-items:center;gap:10px;
-      font-size:14px;font-family:inherit;box-shadow:0 2px 12px rgba(0,0,0,.15);
-      animation:slideDown .3s var(--ease-out,ease)">
-      <span style="font-size:22px;flex-shrink:0">📍</span>
-      <div style="flex:1">
-        <strong>Comprecio necesita tu ubicacion</strong><br>
-        <span style="font-size:12px;opacity:.9">Para ver precios cerca tuyo. Toca el boton para activarla.</span>
-      </div>
-      <button onclick="retryGeoPermission()" style="
-        background:#fff;color:#d97706;border:none;border-radius:8px;
-        padding:8px 14px;font-weight:700;font-size:13px;cursor:pointer;
-        white-space:nowrap;flex-shrink:0">
-        Activar 📍
-      </button>
-      <button onclick="dismissGeoBanner()" style="
-        background:none;border:none;color:#fff;font-size:18px;
-        cursor:pointer;padding:4px;opacity:.7">✕</button>
-    </div>
-  `;
-  document.body.prepend(banner);
-}
-
-function hideGeoBanner() {
-  const b = document.getElementById('geo-banner');
-  if (b) b.remove();
-}
-
-function dismissGeoBanner() {
-  hideGeoBanner();
-  stopGeoRetry();
-  sessionStorage.setItem('geo_banner_dismissed', '1');
-}
-
-function retryGeoPermission() {
-  // Forzar que el navegador re-pida el permiso
-  toast('Buscando tu ubicacion...', 'info');
-  navigator.geolocation.getCurrentPosition(
-    pos => {
-      userLat = pos.coords.latitude;
-      userLng = pos.coords.longitude;
-      hasUserLocation = true;
-      geoPermissionState = 'granted';
-      hideGeoBanner();
-      stopGeoRetry();
-      toast('Ubicacion activada!', 'ok');
-      if (mapReady && map) {
-        map.setView([userLat, userLng], 15);
-        showUserLocationMarker();
-      }
-    },
-    err => {
-      if (err.code === 1) {
-        toast('Permiso denegado. En tu navegador: toca el candado 🔒 arriba y permite Ubicacion. Luego recarga.', 'err', 6000);
-      } else {
-        toast('No se pudo obtener GPS. Intenta de nuevo.', 'err');
-      }
-    },
-    { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
-  );
-}
-
-// Reintentar cada 30 seg (por si el usuario cambia el permiso en ajustes)
-function startGeoRetry() {
-  if (geoRetryTimer) return;
-  if (sessionStorage.getItem('geo_banner_dismissed')) return;
-  geoRetryTimer = setInterval(() => {
-    if (hasUserLocation) { stopGeoRetry(); return; }
-    // Checkear silenciosamente si el permiso cambió
-    if (navigator.permissions && navigator.permissions.query) {
-      navigator.permissions.query({ name: 'geolocation' }).then(result => {
-        if (result.state === 'granted') {
-          requestGeoPosition();
-        }
-      });
-    }
-  }, 30000);
-}
-
-function stopGeoRetry() {
-  if (geoRetryTimer) { clearInterval(geoRetryTimer); geoRetryTimer = null; }
 }
 
 function showUserLocationMarker() {
@@ -1251,30 +1141,46 @@ async function verifyBiz(bizId, btn) {
 // ── IR A MI UBICACIÓN (mapa) ────────────────────
 function goToMyLocation() {
   if (!mapReady) { initMap(); }
-  if (!navigator.geolocation) { toast('Tu dispositivo no tiene GPS', 'err'); return; }
   toast('Buscando tu ubicacion...', 'info');
-  navigator.geolocation.getCurrentPosition(
-    pos => {
-      userLat = pos.coords.latitude;
-      userLng = pos.coords.longitude;
-      hasUserLocation = true;
-      map.setView([userLat, userLng], 16);
-      showUserLocationMarker();
-      toast('Ubicacion encontrada');
-    },
-    err => {
-      console.warn('GPS error:', err.code, err.message);
-      if (err.code === 1) {
-        showGeoBanner();
-        toast('Permiso denegado. Toca "Activar 📍" arriba o permite ubicacion en ajustes del navegador.', 'err', 5000);
-      } else if (err.code === 2) {
-        toast('GPS no disponible. Navega el mapa manualmente.', 'err');
-      } else {
-        toast('GPS tardo demasiado. Intenta de nuevo.', 'err');
+
+  if (hasUserLocation) {
+    map.setView([userLat, userLng], 16);
+    showUserLocationMarker();
+    toast('Ubicacion encontrada');
+    return;
+  }
+
+  // Intentar GPS nativo primero, si falla ir por IP
+  if (navigator.geolocation) {
+    navigator.geolocation.getCurrentPosition(
+      pos => {
+        applyGeo(pos.coords.latitude, pos.coords.longitude);
+        map.setView([userLat, userLng], 16);
+        toast('Ubicacion encontrada');
+      },
+      () => {
+        // GPS denegado o no disponible — obtener por IP silenciosamente
+        geoFallbackIP();
+        setTimeout(() => {
+          if (hasUserLocation) {
+            map.setView([userLat, userLng], 16);
+            toast('Ubicacion aproximada encontrada');
+          } else {
+            toast('Navega el mapa manualmente', 'info');
+          }
+        }, 2000);
+      },
+      { enableHighAccuracy: true, timeout: 8000, maximumAge: 30000 }
+    );
+  } else {
+    geoFallbackIP();
+    setTimeout(() => {
+      if (hasUserLocation) {
+        map.setView([userLat, userLng], 16);
+        toast('Ubicacion aproximada encontrada');
       }
-    },
-    { enableHighAccuracy: true, timeout: 15000, maximumAge: 30000 }
-  );
+    }, 2000);
+  }
 }
 
 // ── RANKING ZONA ────────────────────────────────
@@ -1283,16 +1189,23 @@ function toggleRankZone() {
   const btn = document.getElementById('rank-zone-btn');
   const lbl = document.getElementById('rank-zone-label');
   if (rankZoneActive) {
-    if (!navigator.geolocation) { toast('Tu dispositivo no tiene GPS', 'err'); rankZoneActive = false; return; }
-    navigator.geolocation.getCurrentPosition(pos => {
-      userLat = pos.coords.latitude;
-      userLng = pos.coords.longitude;
+    const activateZone = () => {
       btn.style.background = 'var(--green)';
       btn.style.color = '#fff';
       btn.textContent = '📍 Mi zona (5km)';
       lbl.textContent = 'Mostrando precios cerca tuyo';
       loadRanking();
-    }, () => { toast('No se pudo obtener tu ubicación', 'err'); rankZoneActive = false; });
+    };
+    if (hasUserLocation) {
+      activateZone();
+    } else {
+      // Obtener ubicacion por IP si GPS no disponible
+      geoFallbackIP();
+      setTimeout(() => {
+        if (hasUserLocation) { activateZone(); }
+        else { toast('No se pudo obtener ubicacion', 'err'); rankZoneActive = false; }
+      }, 2500);
+    }
   } else {
     btn.style.background = '#fff';
     btn.style.color = 'var(--green)';
