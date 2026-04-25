@@ -1,4 +1,5 @@
 const express = require('express');
+const bcrypt = require('bcryptjs');
 const { getDB } = require('../db');
 const { authRequired } = require('../middleware/auth');
 
@@ -97,6 +98,22 @@ router.delete('/users/:id', async (req, res) => {
     }
     await db.run('DELETE FROM users WHERE id = ?', [req.params.id]);
     res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/admin/users/:id/reset-password
+router.post('/users/:id/reset-password', async (req, res) => {
+  const { newPassword } = req.body;
+  if (!newPassword || newPassword.length < 6) {
+    return res.status(400).json({ error: 'La contraseña debe tener al menos 6 caracteres' });
+  }
+  try {
+    const db = getDB();
+    const hash = await bcrypt.hash(newPassword, 10);
+    await db.run('UPDATE users SET password = ? WHERE id = ?', [hash, req.params.id]);
+    res.json({ ok: true, message: 'Contraseña restaurada' });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

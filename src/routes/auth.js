@@ -57,6 +57,28 @@ router.post('/login', async (req, res) => {
   }
 });
 
+// POST /api/auth/change-password
+router.post('/change-password', authRequired, async (req, res) => {
+  const { oldPassword, newPassword } = req.body;
+  if (!oldPassword || !newPassword) return res.status(400).json({ error: 'Faltan campos' });
+  if (newPassword.length < 6) return res.status(400).json({ error: 'La nueva contraseña debe tener al menos 6 caracteres' });
+
+  try {
+    const db = getDB();
+    const user = await db.get('SELECT * FROM users WHERE id = ?', [req.user.id]);
+    if (!user) return res.status(404).json({ error: 'Usuario no encontrado' });
+
+    const ok = await bcrypt.compare(oldPassword, user.password);
+    if (!ok) return res.status(401).json({ error: 'La contraseña actual es incorrecta' });
+
+    const hash = await bcrypt.hash(newPassword, 10);
+    await db.run('UPDATE users SET password = ? WHERE id = ?', [hash, user.id]);
+    res.json({ message: 'Contraseña actualizada' });
+  } catch (err) {
+    res.status(500).json({ error: 'Error al cambiar la contraseña' });
+  }
+});
+
 // GET /api/auth/me
 router.get('/me', authRequired, async (req, res) => {
   try {

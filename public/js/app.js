@@ -1045,6 +1045,66 @@ function logout() {
   toast('Sesión cerrada', 'info');
 }
 
+// ── VER/OCULTAR CONTRASEÑA ─────────────────────
+function togglePass(inputId, btn) {
+  const inp = document.getElementById(inputId);
+  const icon = btn.querySelector('i');
+  if (inp.type === 'password') {
+    inp.type = 'text';
+    icon.className = 'fa fa-eye-slash';
+  } else {
+    inp.type = 'password';
+    icon.className = 'fa fa-eye';
+  }
+}
+
+// ── CAMBIAR CONTRASEÑA ─────────────────────────
+function openChangePassword() {
+  document.getElementById('change-pass-modal').style.display = 'flex';
+  document.getElementById('cp-old').value = '';
+  document.getElementById('cp-new').value = '';
+  document.getElementById('cp-confirm').value = '';
+  document.getElementById('chpass-err').style.display = 'none';
+}
+
+function closeChangePassword() {
+  document.getElementById('change-pass-modal').style.display = 'none';
+}
+
+async function doChangePassword() {
+  const oldPass = document.getElementById('cp-old').value.trim();
+  const newPass = document.getElementById('cp-new').value.trim();
+  const confirmPass = document.getElementById('cp-confirm').value.trim();
+  const errEl = document.getElementById('chpass-err');
+
+  errEl.style.display = 'none';
+
+  if (!oldPass || !newPass || !confirmPass) {
+    errEl.textContent = 'Completa todos los campos';
+    errEl.style.display = 'block';
+    return;
+  }
+  if (newPass.length < 6) {
+    errEl.textContent = 'La nueva contraseña debe tener al menos 6 caracteres';
+    errEl.style.display = 'block';
+    return;
+  }
+  if (newPass !== confirmPass) {
+    errEl.textContent = 'Las contraseñas nuevas no coinciden';
+    errEl.style.display = 'block';
+    return;
+  }
+
+  try {
+    await api('POST', '/auth/change-password', { oldPassword: oldPass, newPassword: newPass });
+    closeChangePassword();
+    toast('Contraseña actualizada correctamente');
+  } catch (e) {
+    errEl.textContent = e.message || 'Error al cambiar la contraseña';
+    errEl.style.display = 'block';
+  }
+}
+
 function updateChip() {
   const label = document.getElementById('chip-label');
   if (currentUser) label.textContent = `${currentUser.name.split(' ')[0]} · ${currentUser.points || 0}pts`;
@@ -1498,9 +1558,10 @@ function renderAdminUsers(users) {
         <span>💰 ${u.prices_count || 0} precios</span>
         <span>👍 ${u.reactions_count || 0} reacciones</span>
       </div>
-      <div style="display:flex;gap:6px">
+      <div style="display:flex;gap:6px;flex-wrap:wrap">
         <button onclick="openAdminEdit(${u.id})" style="flex:1;padding:7px;border-radius:8px;border:1.5px solid #0f172a;background:#fff;color:#0f172a;font-weight:700;font-size:.78rem;cursor:pointer">✏️ Editar</button>
-        <button onclick="toggleBlockUser(${u.id},${u.blocked?0:1})" style="flex:1;padding:7px;border-radius:8px;border:1.5px solid ${u.blocked?'#28a745':'#e74c3c'};background:${u.blocked?'#d4edda':'#fdecea'};color:${u.blocked?'#155724':'#c0392b'};font-weight:700;font-size:.78rem;cursor:pointer">${u.blocked?'🔓 Desbloquear':'🔒 Bloquear'}</button>
+        <button onclick="adminResetPassword(${u.id},'${esc(u.name)}')" style="flex:1;padding:7px;border-radius:8px;border:1.5px solid var(--green);background:var(--green-light);color:var(--green);font-weight:700;font-size:.78rem;cursor:pointer">🔑 Contraseña</button>
+        <button onclick="toggleBlockUser(${u.id},${u.blocked?0:1})" style="padding:7px 10px;border-radius:8px;border:1.5px solid ${u.blocked?'#28a745':'#e74c3c'};background:${u.blocked?'#d4edda':'#fdecea'};color:${u.blocked?'#155724':'#c0392b'};font-weight:700;font-size:.78rem;cursor:pointer">${u.blocked?'🔓':'🔒'}</button>
         <button onclick="deleteAdminUser(${u.id},'${esc(u.name)}')" style="padding:7px 10px;border-radius:8px;border:1.5px solid #e74c3c;background:#fdecea;color:#c0392b;font-weight:700;font-size:.78rem;cursor:pointer">🗑️</button>
       </div>
     </div>`).join('');
@@ -1546,6 +1607,18 @@ async function toggleBlockUser(userId, blockVal) {
     await api('PATCH', `/admin/users/${userId}`, { blocked: blockVal === 1 });
     toast(blockVal ? '🔒 Usuario bloqueado' : '🔓 Usuario desbloqueado');
     loadAdminUsers();
+  } catch (err) {
+    toast(err.message, 'err');
+  }
+}
+
+async function adminResetPassword(userId, name) {
+  const newPass = prompt(`Nueva contraseña para "${name}" (mín. 6 caracteres):`);
+  if (!newPass) return;
+  if (newPass.length < 6) { toast('La contraseña debe tener al menos 6 caracteres', 'err'); return; }
+  try {
+    await api('POST', `/admin/users/${userId}/reset-password`, { newPassword: newPass });
+    toast(`Contraseña de ${name} restaurada`);
   } catch (err) {
     toast(err.message, 'err');
   }
