@@ -42,44 +42,181 @@ let userLocationMarker = null;
 let hasUserLocation = false;
 
 function tryGeo() {
-  if (!navigator.geolocation) { geoFallbackIP(); return; }
-  navigator.geolocation.getCurrentPosition(
-    pos => { applyGeo(pos.coords.latitude, pos.coords.longitude); },
-    () => { geoFallbackIP(); },
-    { enableHighAccuracy: true, timeout: 8000, maximumAge: 60000 }
-  );
+  if (!navigator.geolocation) return;
+
+  // Verificar estado del permiso primero
+  if (navigator.permissions && navigator.permissions.query) {
+    navigator.permissions.query({ name: 'geolocation' }).then(result => {
+      if (result.state === 'granted') {
+        // Ya tiene permiso, pedir directo
+        requestGeo();
+      } else if (result.state === 'prompt') {
+        // Primera vez — mostrar pantalla pre-permiso para que entienda por que
+        showGeoPrePermission();
+      } else {
+        // Denegado — mostrar instrucciones claras para reactivar
+        showGeoDeniedHelp();
+      }
+      // Escuchar cambios (si el usuario reactiva en ajustes del browser)
+      result.addEventListener('change', () => {
+        if (result.state === 'granted') {
+          hideGeoOverlay();
+          requestGeo();
+        }
+      });
+    }).catch(() => {
+      // Permissions API no soportada, intentar directo
+      requestGeo();
+    });
+  } else {
+    requestGeo();
+  }
 }
 
-// Fallback: obtener ubicacion aproximada por IP (sin permisos)
-function geoFallbackIP() {
-  fetch('https://ipapi.co/json/')
-    .then(r => r.json())
-    .then(data => {
-      if (data.latitude && data.longitude) {
-        applyGeo(data.latitude, data.longitude);
-      }
-    })
-    .catch(() => {
-      // Segundo fallback
-      fetch('https://ip-api.com/json/?fields=lat,lon')
-        .then(r => r.json())
-        .then(data => {
-          if (data.lat && data.lon) {
-            applyGeo(data.lat, data.lon);
-          }
-        })
-        .catch(() => { /* sin ubicacion, se usa la default Buenos Aires */ });
-    });
+function requestGeo() {
+  navigator.geolocation.getCurrentPosition(
+    pos => {
+      applyGeo(pos.coords.latitude, pos.coords.longitude);
+    },
+    err => {
+      if (err.code === 1) showGeoDeniedHelp();
+      // code 2 o 3: sin GPS disponible o timeout, no molestar
+    },
+    { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 }
+  );
 }
 
 function applyGeo(lat, lng) {
   userLat = lat;
   userLng = lng;
   hasUserLocation = true;
+  hideGeoOverlay();
   if (mapReady && map) {
     map.setView([userLat, userLng], 15);
     showUserLocationMarker();
   }
+}
+
+// ── PANTALLA PRE-PERMISO (primera vez) ──────────
+// Se muestra ANTES de que el navegador pida permiso,
+// para que el usuario entienda por que y le de "Permitir"
+function showGeoPrePermission() {
+  if (document.getElementById('geo-overlay')) return;
+  const overlay = document.createElement('div');
+  overlay.id = 'geo-overlay';
+  overlay.innerHTML = `
+    <div style="position:fixed;inset:0;z-index:10000;background:rgba(0,0,0,.6);
+      display:flex;align-items:center;justify-content:center;padding:20px;
+      animation:fadeIn .25s ease">
+      <div style="background:#fff;border-radius:20px;padding:32px 24px;
+        max-width:340px;width:100%;text-align:center;box-shadow:0 20px 60px rgba(0,0,0,.3)">
+        <div style="font-size:56px;margin-bottom:12px">📍</div>
+        <h2 style="margin:0 0 8px;font-size:1.3rem;color:#0f172a">
+          ¿Activar ubicacion?
+        </h2>
+        <p style="margin:0 0 20px;color:#64748b;font-size:.9rem;line-height:1.5">
+          Para mostrarte los <strong>precios de tu barrio</strong>
+          y los negocios mas cercanos necesitamos tu ubicacion.
+        </p>
+        <button onclick="acceptGeoPermission()" style="
+          width:100%;padding:14px;background:var(--green,#059669);color:#fff;
+          border:none;border-radius:12px;font-size:1rem;font-weight:700;
+          cursor:pointer;margin-bottom:10px">
+          Activar ubicacion
+        </button>
+        <button onclick="skipGeoPermission()" style="
+          width:100%;padding:10px;background:none;border:none;
+          color:#94a3b8;font-size:.85rem;cursor:pointer">
+          Ahora no
+        </button>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+}
+
+function acceptGeoPermission() {
+  hideGeoOverlay();
+  // Ahora si el navegador muestra su popup nativo de permiso
+  navigator.geolocation.getCurrentPosition(
+    pos => { applyGeo(pos.coords.latitude, pos.coords.longitude); },
+    err => { if (err.code === 1) showGeoDeniedHelp(); },
+    { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
+  );
+}
+
+function skipGeoPermission() {
+  hideGeoOverlay();
+  sessionStorage.setItem('geo_skipped', '1');
+}
+
+// ── PANTALLA PERMISO DENEGADO (instrucciones) ───
+// Cuando ya denegó antes, guiarlo para reactivar
+function showGeoDeniedHelp() {
+  if (document.getElementById('geo-overlay')) return;
+  if (sessionStorage.getItem('geo_denied_shown')) return;
+  sessionStorage.setItem('geo_denied_shown', '1');
+
+  const isIOS = /iPhone|iPad/i.test(navigator.userAgent);
+  const isAndroid = /Android/i.test(navigator.userAgent);
+
+  let steps = '';
+  if (isIOS) {
+    steps = `
+      <div style="text-align:left;font-size:.85rem;color:#475569;line-height:1.6">
+        <strong>En Safari:</strong><br>
+        1. Toca <strong>aA</strong> en la barra de direccion<br>
+        2. <strong>Configuracion del sitio web</strong><br>
+        3. Activa <strong>Ubicacion</strong><br>
+        4. Recarga la pagina
+      </div>`;
+  } else if (isAndroid) {
+    steps = `
+      <div style="text-align:left;font-size:.85rem;color:#475569;line-height:1.6">
+        <strong>En Chrome:</strong><br>
+        1. Toca el <strong>candado 🔒</strong> en la barra de direccion<br>
+        2. Toca <strong>Permisos</strong><br>
+        3. Activa <strong>Ubicacion</strong><br>
+        4. Recarga la pagina
+      </div>`;
+  } else {
+    steps = `
+      <div style="text-align:left;font-size:.85rem;color:#475569;line-height:1.6">
+        1. Toca el <strong>candado 🔒</strong> en la barra de direccion<br>
+        2. Busca <strong>Ubicacion</strong> y cambiala a <strong>Permitir</strong><br>
+        3. Recarga la pagina
+      </div>`;
+  }
+
+  const overlay = document.createElement('div');
+  overlay.id = 'geo-overlay';
+  overlay.innerHTML = `
+    <div style="position:fixed;inset:0;z-index:10000;background:rgba(0,0,0,.6);
+      display:flex;align-items:center;justify-content:center;padding:20px;
+      animation:fadeIn .25s ease">
+      <div style="background:#fff;border-radius:20px;padding:32px 24px;
+        max-width:340px;width:100%;text-align:center;box-shadow:0 20px 60px rgba(0,0,0,.3)">
+        <div style="font-size:48px;margin-bottom:12px">🔒</div>
+        <h2 style="margin:0 0 8px;font-size:1.2rem;color:#0f172a">
+          Ubicacion bloqueada
+        </h2>
+        <p style="margin:0 0 16px;color:#64748b;font-size:.88rem;line-height:1.5">
+          El navegador bloqueo la ubicacion. Seguí estos pasos para activarla:
+        </p>
+        ${steps}
+        <button onclick="hideGeoOverlay()" style="
+          width:100%;padding:12px;background:var(--green,#059669);color:#fff;
+          border:none;border-radius:12px;font-size:.95rem;font-weight:700;
+          cursor:pointer;margin-top:18px">
+          Entendido
+        </button>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+}
+
+function hideGeoOverlay() {
+  const el = document.getElementById('geo-overlay');
+  if (el) el.remove();
 }
 
 function showUserLocationMarker() {
@@ -1141,7 +1278,6 @@ async function verifyBiz(bizId, btn) {
 // ── IR A MI UBICACIÓN (mapa) ────────────────────
 function goToMyLocation() {
   if (!mapReady) { initMap(); }
-  toast('Buscando tu ubicacion...', 'info');
 
   if (hasUserLocation) {
     map.setView([userLat, userLng], 16);
@@ -1150,7 +1286,8 @@ function goToMyLocation() {
     return;
   }
 
-  // Intentar GPS nativo primero, si falla ir por IP
+  // Pedir ubicacion — si no tiene permiso mostrará la pantalla correspondiente
+  toast('Buscando tu ubicacion...', 'info');
   if (navigator.geolocation) {
     navigator.geolocation.getCurrentPosition(
       pos => {
@@ -1158,28 +1295,12 @@ function goToMyLocation() {
         map.setView([userLat, userLng], 16);
         toast('Ubicacion encontrada');
       },
-      () => {
-        // GPS denegado o no disponible — obtener por IP silenciosamente
-        geoFallbackIP();
-        setTimeout(() => {
-          if (hasUserLocation) {
-            map.setView([userLat, userLng], 16);
-            toast('Ubicacion aproximada encontrada');
-          } else {
-            toast('Navega el mapa manualmente', 'info');
-          }
-        }, 2000);
+      err => {
+        if (err.code === 1) { showGeoDeniedHelp(); }
+        else { toast('GPS no disponible. Navega el mapa manualmente.', 'info'); }
       },
-      { enableHighAccuracy: true, timeout: 8000, maximumAge: 30000 }
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 30000 }
     );
-  } else {
-    geoFallbackIP();
-    setTimeout(() => {
-      if (hasUserLocation) {
-        map.setView([userLat, userLng], 16);
-        toast('Ubicacion aproximada encontrada');
-      }
-    }, 2000);
   }
 }
 
@@ -1198,13 +1319,14 @@ function toggleRankZone() {
     };
     if (hasUserLocation) {
       activateZone();
+    } else if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        pos => { applyGeo(pos.coords.latitude, pos.coords.longitude); activateZone(); },
+        () => { showGeoDeniedHelp(); rankZoneActive = false; },
+        { enableHighAccuracy: true, timeout: 10000, maximumAge: 30000 }
+      );
     } else {
-      // Obtener ubicacion por IP si GPS no disponible
-      geoFallbackIP();
-      setTimeout(() => {
-        if (hasUserLocation) { activateZone(); }
-        else { toast('No se pudo obtener ubicacion', 'err'); rankZoneActive = false; }
-      }, 2500);
+      toast('GPS no disponible', 'err'); rankZoneActive = false;
     }
   } else {
     btn.style.background = '#fff';
